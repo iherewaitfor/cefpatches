@@ -1,0 +1,306 @@
+diff --git a/gpu/command_buffer/client/gles2_cmd_helper.cc b/gpu/command_buffer/client/gles2_cmd_helper.cc
+index 362cadf7eb59c..4004a0471a279 100644
+--- a/gpu/command_buffer/client/gles2_cmd_helper.cc
++++ b/gpu/command_buffer/client/gles2_cmd_helper.cc
+@@ -13,6 +13,13 @@ GLES2CmdHelper::GLES2CmdHelper(CommandBuffer* command_buffer)
+ 
+ GLES2CmdHelper::~GLES2CmdHelper() = default;
+ 
++void GLES2CmdHelper::TexBindSharedHandle(GLintptr handle) {
++  gles2::cmds::TexBindSharedHandle* c =
++      GetCmdSpace<gles2::cmds::TexBindSharedHandle>();
++  if (c) {
++    c->Init(handle);
++  }
++}
+ }  // namespace gles2
+ }  // namespace gpu
+ 
+diff --git a/gpu/command_buffer/client/gles2_cmd_helper.h b/gpu/command_buffer/client/gles2_cmd_helper.h
+index 081ed80a42f6a..36b6981fa2087 100644
+--- a/gpu/command_buffer/client/gles2_cmd_helper.h
++++ b/gpu/command_buffer/client/gles2_cmd_helper.h
+@@ -31,6 +31,8 @@ class GPU_GLES2_EXPORT GLES2CmdHelper : public CommandBufferHelper {
+   #include "gpu/command_buffer/client/gles2_cmd_helper_autogen.h"
+ 
+   // Helpers that could not be auto-generated.
++
++  void TexBindSharedHandle(GLintptr handle);
+ };
+ 
+ }  // namespace gles2
+diff --git a/gpu/command_buffer/client/gles2_implementation.cc b/gpu/command_buffer/client/gles2_implementation.cc
+index 365d518602ace..7127a034127b0 100644
+--- a/gpu/command_buffer/client/gles2_implementation.cc
++++ b/gpu/command_buffer/client/gles2_implementation.cc
+@@ -493,6 +493,15 @@ void GLES2Implementation::FreeSharedMemory(void* mem) {
+   mapped_memory_->FreePendingToken(mem, helper_->InsertToken());
+ }
+ 
++
++void GLES2Implementation::TexBindSharedHandle(GLintptr handle) {
++  GPU_CLIENT_SINGLE_THREAD_CHECK();
++  GPU_CLIENT_LOG("[" << GetLogPrefix() << "] TexBindSharedHandle(" << handle
++                     << ")");
++  helper_->TexBindSharedHandle(handle);
++  CheckGLError();
++}
++
+ GLuint GLES2Implementation::CreateGpuFenceCHROMIUM() {
+   GLuint client_id = GetIdAllocator(IdNamespaces::kGpuFences)
+                          ->AllocateIDAtOrAbove(last_gpu_fence_id_ + 1);
+diff --git a/gpu/command_buffer/client/gles2_implementation.h b/gpu/command_buffer/client/gles2_implementation.h
+index 0cc6299b72273..2e3486a6ef27b 100644
+--- a/gpu/command_buffer/client/gles2_implementation.h
++++ b/gpu/command_buffer/client/gles2_implementation.h
+@@ -109,6 +109,8 @@ class GLES2_IMPL_EXPORT GLES2Implementation : public GLES2Interface,
+   // this file instead of having to edit some template or the code generator.
+   #include "gpu/command_buffer/client/gles2_implementation_autogen.h"
+ 
++  void TexBindSharedHandle(GLintptr handle) override;
++
+   // ContextSupport implementation.
+   void SetAggressivelyFreeResources(bool aggressively_free_resources) override;
+   void Swap(uint32_t flags,
+diff --git a/gpu/command_buffer/client/gles2_interface.h b/gpu/command_buffer/client/gles2_interface.h
+index f6f925dd90758..efb135e7dc7a3 100644
+--- a/gpu/command_buffer/client/gles2_interface.h
++++ b/gpu/command_buffer/client/gles2_interface.h
+@@ -51,6 +51,8 @@ class GLES2Interface : public InterfaceBase {
+   // it means we can easily edit the non-auto generated parts right here in
+   // this file instead of having to edit some template or the code generator.
+   #include "gpu/command_buffer/client/gles2_interface_autogen.h"
++
++    virtual void TexBindSharedHandle(GLintptr handle) = 0;
+ };
+ 
+ }  // namespace gles2
+diff --git a/gpu/command_buffer/client/gles2_trace_implementation.cc b/gpu/command_buffer/client/gles2_trace_implementation.cc
+index 006650c5f3d3a..805c9353f8ff0 100644
+--- a/gpu/command_buffer/client/gles2_trace_implementation.cc
++++ b/gpu/command_buffer/client/gles2_trace_implementation.cc
+@@ -33,6 +33,11 @@ void GLES2TraceImplementation::ShallowFlushCHROMIUM() {
+   gl_->ShallowFlushCHROMIUM();
+ }
+ 
++void GLES2TraceImplementation::TexBindSharedHandle(GLintptr handle) {
++  // TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::TexBindSharedHandle");
++  gl_->TexBindSharedHandle(handle);
++}
++
+ // Include the auto-generated part of this file. We split this because it means
+ // we can easily edit the non-auto generated parts right here in this file
+ // instead of having to edit some template or the code generator.
+diff --git a/gpu/command_buffer/client/gles2_trace_implementation.h b/gpu/command_buffer/client/gles2_trace_implementation.h
+index 6570e3a79491c..f1d4c568cf898 100644
+--- a/gpu/command_buffer/client/gles2_trace_implementation.h
++++ b/gpu/command_buffer/client/gles2_trace_implementation.h
+@@ -30,6 +30,8 @@ class GLES2_IMPL_EXPORT GLES2TraceImplementation : public GLES2Interface {
+   // this file instead of having to edit some template or the code generator.
+   #include "gpu/command_buffer/client/gles2_trace_implementation_autogen.h"
+ 
++  void TexBindSharedHandle(GLintptr handle) override;
++
+  private:
+   GLES2Interface* gl_;
+ };
+diff --git a/gpu/command_buffer/common/gles2_cmd_format.h b/gpu/command_buffer/common/gles2_cmd_format.h
+index 46318da8c946c..9e19bebb6b9bc 100644
+--- a/gpu/command_buffer/common/gles2_cmd_format.h
++++ b/gpu/command_buffer/common/gles2_cmd_format.h
+@@ -259,6 +259,41 @@ static_assert(offsetof(GLES2ReturnProgramInfo, program_client_id) == 4,
+ static_assert(offsetof(GLES2ReturnProgramInfo, deserialized_buffer) == 8,
+               "The offset of deserialized_buffer should be 8");
+ 
++
++struct TexBindSharedHandle {
++  typedef TexBindSharedHandle ValueType;
++  static const CommandId kCmdId = (CommandId)kTexBindSharedHandle;
++  static const cmd::ArgFlags kArgFlags = cmd::kFixed;
++  static const uint8_t cmd_flags = CMD_FLAG_SET_TRACE_LEVEL(1);
++
++  static uint32_t ComputeSize() {
++    return static_cast<uint32_t>(sizeof(ValueType));  // NOLINT
++  }
++
++  void SetHeader() { header.SetCmd<ValueType>(); }
++
++  void Init(GLintptr _handle) {
++    SetHeader();
++    handle = _handle;
++  }
++
++  void* Set(void* cmd,
++            GLintptr _handle) {
++    static_cast<ValueType*>(cmd)->Init(_handle);
++    return NextCmdAddress<ValueType>(cmd);
++  }
++
++  gpu::CommandHeader header;
++  GLintptr handle;
++  static const int32_t border = 0;
++};
++
++static_assert(sizeof(TexBindSharedHandle) == 8,
++              "size of TexBindSharedHandle should be 8");
++static_assert(offsetof(TexBindSharedHandle, header) == 0,
++              "offset of TexBindSharedHandle header should be 0");
++static_assert(offsetof(TexBindSharedHandle, handle) == 4,
++              "offset of TexBindSharedHandle handle should be 4");
+ #pragma pack(pop)
+ 
+ }  // namespace cmd
+diff --git a/gpu/command_buffer/common/gles2_cmd_ids.h b/gpu/command_buffer/common/gles2_cmd_ids.h
+index b701c914d057d..47ff9432b0502 100644
+--- a/gpu/command_buffer/common/gles2_cmd_ids.h
++++ b/gpu/command_buffer/common/gles2_cmd_ids.h
+@@ -8,6 +8,9 @@
+ #define GPU_COMMAND_BUFFER_COMMON_GLES2_CMD_IDS_H_
+ 
+ #include "gpu/command_buffer/common/cmd_buffer_common.h"
++enum {
++    kTexBindSharedHandle = 2000,
++};
+ 
+ namespace gpu {
+ namespace gles2 {
+diff --git a/gpu/command_buffer/service/gles2_cmd_decoder.cc b/gpu/command_buffer/service/gles2_cmd_decoder.cc
+index a1026bb4d856a..f477395a37911 100644
+--- a/gpu/command_buffer/service/gles2_cmd_decoder.cc
++++ b/gpu/command_buffer/service/gles2_cmd_decoder.cc
+@@ -2592,6 +2592,9 @@ class GLES2DecoderImpl : public GLES2Decoder,
+   // buffer.
+   void ReportProgress();
+ 
++  Error HandleTexBindSharedHandle(uint32_t immediate_data_size,
++                                  const volatile void* data);
++
+   // Generate a member function prototype for each command in an automated and
+   // typesafe way.
+ #define GLES2_CMD_OP(name) \
+@@ -2843,7 +2846,7 @@ class GLES2DecoderImpl : public GLES2Decoder,
+   };
+ 
+   // A table of CommandInfo for all the commands.
+-  static const CommandInfo command_info[kNumCommands - kFirstGLES2Command];
++  static const CommandInfo command_info[kNumCommands - kFirstGLES2Command + 1];
+ 
+   // Most recent generation of the TextureManager.  If this no longer matches
+   // the current generation when our context becomes current, then we'll rebind
+@@ -2877,6 +2880,7 @@ constexpr GLES2DecoderImpl::CommandInfo GLES2DecoderImpl::command_info[] = {
+   }                                                          \
+   , /* NOLINT */
+     GLES2_COMMAND_LIST(GLES2_CMD_OP)
++    GLES2_CMD_OP(TexBindSharedHandle)
+ #undef GLES2_CMD_OP
+ };
+ 
+@@ -6002,7 +6006,7 @@ error::Error GLES2DecoderImpl::DoCommandsImpl(unsigned int num_commands,
+     }
+ 
+     const unsigned int arg_count = size - 1;
+-    unsigned int command_index = command - kFirstGLES2Command;
++    unsigned int command_index = command - (command < kNumCommands ? 0 : kTexBindSharedHandle - kNumCommands) - kFirstGLES2Command;
+     if (command_index < base::size(command_info)) {
+       const CommandInfo& info = command_info[command_index];
+       unsigned int info_arg_count = static_cast<unsigned int>(info.arg_count);
+@@ -20294,6 +20298,22 @@ void GLES2DecoderImpl::ReportProgress() {
+     group_->ReportProgress();
+ }
+ 
++error::Error GLES2DecoderImpl::HandleTexBindSharedHandle(
++    uint32_t immediate_data_size,
++    const volatile void* cmd_data) {
++  const volatile cmds::TexBindSharedHandle& c =
++      *static_cast<const volatile cmds::TexBindSharedHandle*>(cmd_data);
++
++  typedef GLboolean(__stdcall * func)(GLintptr handle);
++  func magicTexBindSharedHandleFn =
++      reinterpret_cast<func>(gl::GetGLProcAddress("magicTexBindSharedHandle"));
++  if (magicTexBindSharedHandleFn == NULL) {
++    return error::kUnknownCommand;
++  }
++  magicTexBindSharedHandleFn(c.handle);
++  return error::kNoError;
++}
++
+ error::Error GLES2DecoderImpl::HandleSetActiveURLCHROMIUM(
+     uint32_t immediate_data_size,
+     const volatile void* cmd_data) {
+diff --git a/gpu/command_buffer/service/gles2_cmd_decoder_passthrough.cc b/gpu/command_buffer/service/gles2_cmd_decoder_passthrough.cc
+index 85bdd3dddc01c..99573c3718fef 100644
+--- a/gpu/command_buffer/service/gles2_cmd_decoder_passthrough.cc
++++ b/gpu/command_buffer/service/gles2_cmd_decoder_passthrough.cc
+@@ -833,7 +833,10 @@ GLES2Decoder::Error GLES2DecoderPassthroughImpl::DoCommandsImpl(
+     }
+ 
+     const unsigned int arg_count = size - 1;
+-    unsigned int command_index = command - kFirstGLES2Command;
++    unsigned int command_index =
++        command -
++        (command < kNumCommands ? 0 : kTexBindSharedHandle - kNumCommands) -
++        kFirstGLES2Command;
+     if (command_index < base::size(command_info)) {
+       const CommandInfo& info = command_info[command_index];
+       unsigned int info_arg_count = static_cast<unsigned int>(info.arg_count);
+@@ -3102,7 +3105,7 @@ bool GLES2DecoderPassthroughImpl::CheckErrorCallbackState() {
+ 
+ constexpr GLES2DecoderPassthroughImpl::CommandInfo
+     GLES2DecoderPassthroughImpl::command_info[] = {
+-        GLES2_COMMAND_LIST(GLES2_CMD_OP)};
++        GLES2_COMMAND_LIST(GLES2_CMD_OP) GLES2_CMD_OP(TexBindSharedHandle)};
+ 
+ #undef GLES2_CMD_OP
+ 
+diff --git a/gpu/command_buffer/service/gles2_cmd_decoder_passthrough.h b/gpu/command_buffer/service/gles2_cmd_decoder_passthrough.h
+index b01d5b1136371..5f9997eff0d65 100644
+--- a/gpu/command_buffer/service/gles2_cmd_decoder_passthrough.h
++++ b/gpu/command_buffer/service/gles2_cmd_decoder_passthrough.h
+@@ -542,6 +542,7 @@ class GPU_GLES2_EXPORT GLES2DecoderPassthroughImpl
+   Error Handle##name(uint32_t immediate_data_size, const volatile void* data);
+ 
+   GLES2_COMMAND_LIST(GLES2_CMD_OP)
++  GLES2_CMD_OP(TexBindSharedHandle)
+ #undef GLES2_CMD_OP
+ 
+   using CmdHandler =
+@@ -557,7 +558,7 @@ class GPU_GLES2_EXPORT GLES2DecoderPassthroughImpl
+   };
+ 
+   // A table of CommandInfo for all the commands.
+-  static const CommandInfo command_info[kNumCommands - kFirstGLES2Command];
++  static const CommandInfo command_info[kNumCommands - kFirstGLES2Command + 1];
+ 
+   // The GLApi to make the gl calls on.
+   gl::GLApi* api_ = nullptr;
+diff --git a/gpu/command_buffer/service/gles2_cmd_decoder_passthrough_doers.cc b/gpu/command_buffer/service/gles2_cmd_decoder_passthrough_doers.cc
+index 9402aff909507..c6cf59d630452 100644
+--- a/gpu/command_buffer/service/gles2_cmd_decoder_passthrough_doers.cc
++++ b/gpu/command_buffer/service/gles2_cmd_decoder_passthrough_doers.cc
+@@ -5445,6 +5445,26 @@ error::Error GLES2DecoderPassthroughImpl::DoEndSharedImageAccessDirectCHROMIUM(
+   return error::kNoError;
+ }
+ 
++error::Error GLES2DecoderPassthroughImpl::HandleTexBindSharedHandle(
++    uint32_t immediate_data_size,
++    const volatile void* cmd_data) {
++  const volatile cmds::TexBindSharedHandle& c =
++      *static_cast<const volatile cmds::TexBindSharedHandle*>(cmd_data);
++
++  typedef GLboolean(__stdcall * func)(GLintptr handle);
++  func magicTexBindSharedHandleFn =
++      reinterpret_cast<func>(gl::GetGLProcAddress("magicTexBindSharedHandle"));
++
++  if (magicTexBindSharedHandleFn == NULL) {
++    return error::kUnknownCommand;
++  }
++
++  GLintptr handle = c.handle;
++  magicTexBindSharedHandleFn(handle);
++
++  return error::kNoError;
++}
++
+ error::Error
+ GLES2DecoderPassthroughImpl::DoBeginBatchReadAccessSharedImageCHROMIUM() {
+   DCHECK(group_->shared_image_manager());

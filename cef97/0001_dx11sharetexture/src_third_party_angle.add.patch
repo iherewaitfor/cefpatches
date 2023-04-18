@@ -1,0 +1,198 @@
+diff --git a/src/libGLESv2/entry_points_magic.cpp b/src/libGLESv2/entry_points_magic.cpp
+new file mode 100644
+index 000000000..b6e70e4d9
+--- /dev/null
++++ b/src/libGLESv2/entry_points_magic.cpp
+@@ -0,0 +1,167 @@
++#include "entry_points_magic.h"
++
++#include "libANGLE/Context.h"
++#include "libANGLE/Context.inl.h"
++#include "libANGLE/renderer/TextureImpl.h"
++#include "libANGLE/renderer/d3d/DisplayD3D.h"
++#include "libANGLE/renderer/d3d/TextureD3D.h"
++#include "libANGLE/renderer/d3d/d3d11/Image11.h"
++#include "libANGLE/renderer/d3d/d3d11/Renderer11.h"
++#include "libANGLE/renderer/d3d/d3d11/TextureStorage11.h"
++#include "libANGLE/renderer/d3d/d3d11/renderer11_utils.h"
++#include "libGLESv2/global_state.h"
++
++namespace
++{
++
++static angle::Result GetCurrentResource11(gl::Context *context,
++                                          GLenum target,
++                                          GLint level,
++                                          ID3D11Resource **resource,
++                                          unsigned int *subresourceIndex)
++{
++    gl::TextureTarget targetPacked = gl::FromGLenum<gl::TextureTarget>(target);
++    gl::Texture *texture           = context->getTextureByTarget(targetPacked);
++    rx::TextureD3D *textureImpl    = rx::SafeGetImplAs<rx::TextureD3D>(texture);
++
++    rx::TextureStorage *textureStorage = nullptr;
++    ANGLE_TRY(textureImpl->getNativeTexture(context, &textureStorage));
++    rx::TextureStorage11 *textureStorage11 = rx::GetAs<rx::TextureStorage11>(textureStorage);
++
++    const rx::TextureHelper11 *textureHelper11 = nullptr;
++    ANGLE_TRY(textureStorage11->getResource(context, &textureHelper11));
++
++    if (subresourceIndex)
++    {
++        gl::ImageIndex index = gl::ImageIndex::MakeFromTarget(targetPacked, level, 0);
++        ANGLE_TRY(textureStorage11->getSubresourceIndex(context, index, subresourceIndex));
++    }
++
++    *resource = textureHelper11->get();
++
++    // rx::ImageD3D *image  = textureImpl->getImage(index);
++    // rx::Image11 *image11 = rx::GetAs<rx::Image11>(image);
++
++    // const rx::TextureHelper11 *stagingTexture = nullptr;
++    // auto result = image11->getStagingTexture(context, &stagingTexture, subresourceIndex);
++    // if (ANGLE_UNLIKELY(IsError(result)))
++    //    return GL_FALSE;
++
++    // ASSERT(stagingTexture && stagingTexture->valid());
++
++    //*resource = stagingTexture->get();
++    return angle::Result::Continue;
++}
++
++static angle::Result GetCurrentResource(GLenum target,
++                                        GLint level,
++                                        ID3D11Resource **resource,
++                                        unsigned int *subresourceIndex)
++{
++    gl::Context *context = gl::GetValidGlobalContext();
++    if (!context)
++        return angle::Result::Stop;
++
++    egl::Display *display = context->getDisplay();
++    if (display == EGL_NO_DISPLAY)
++        return angle::Result::Stop;
++
++    const EGLint deviceType = display->getDevice()->getType();
++    if (deviceType == EGL_D3D11_DEVICE_ANGLE)
++        return GetCurrentResource11(context, target, level, resource, subresourceIndex);
++    // else if (deviceType == EGL_D3D9_DEVICE_ANGLE)
++    //    return GetCurrentResource9(context, target, level, resource, subresourceIndex);
++    else
++        return angle::Result::Stop;
++}
++
++}  // namespace
++
++extern "C" {
++
++// Magic
++ANGLE_EXPORT GLboolean GL_APIENTRY magicGetCurrentResource(GLenum target,
++                                                           GLint level,
++                                                           ID3D11Resource **resource,
++                                                           unsigned int *subresourceIndex)
++{
++    ANGLE_SCOPED_GLOBAL_LOCK();
++    // EVENT("(GLenum target = 0x%X)", target);
++
++    return !IsError(GetCurrentResource(target, level, resource, subresourceIndex));
++}
++
++ID3D11Texture2D *getTexture(D3D11_TEXTURE2D_DESC &desc,
++                            ID3D11Device *d3dDevice,
++                            ID3D11DeviceContext *d3dDeviceContext)
++{
++    static ID3D11Texture2D *texture = nullptr;
++
++    if (!texture)
++    {
++        char *buf = (char *)malloc(desc.Width * 4);
++        memset(buf, 0xAA, desc.Width);
++        /*HRESULT hr = */ d3dDevice->CreateTexture2D(&desc, 0, &texture);
++        d3dDeviceContext->UpdateSubresource(texture, 0, nullptr, buf, 0, 0);
++    }
++
++    return texture;
++}
++
++// Magic
++ANGLE_EXPORT GLboolean GL_APIENTRY magicTexBindSharedHandle(GLintptr handle)
++{
++    ANGLE_SCOPED_GLOBAL_LOCK();
++    // EVENT("(GLenum target = 0x%X)", target);
++
++    ID3D11Resource *dstResource   = nullptr;
++    unsigned int subresourceIndex = 0;
++
++    if (magicGetCurrentResource(GL_TEXTURE_2D, 0, &dstResource, &subresourceIndex) == GL_FALSE)
++        return GL_FALSE;
++
++    gl::Context *context = gl::GetValidGlobalContext();
++    if (!context)
++        return GL_FALSE;
++
++    egl::Display *display = context->getDisplay();
++    if (display == EGL_NO_DISPLAY)
++        return GL_FALSE;
++
++    rx::DisplayD3D *displayImpl = rx::SafeGetImplAs<rx::DisplayD3D>(display);
++    if (displayImpl == nullptr)
++        return GL_FALSE;
++
++    rx::Renderer11 *renderer11 = rx::GetAs<rx::Renderer11>(displayImpl->getRenderer());
++    if (renderer11 == nullptr)
++        return GL_FALSE;
++
++    ID3D11Device *d3dDevice = renderer11->getDevice();
++
++    ID3D11Texture2D *texture = nullptr;
++    HRESULT hr = d3dDevice->OpenSharedResource((HANDLE)handle, IID_PPV_ARGS(&texture));
++
++    if (FAILED(hr))
++        return GL_FALSE;
++
++    ID3D11Texture2D *dstTexture = nullptr;
++    dstResource->QueryInterface(__uuidof(ID3D11Texture2D), (void **)&dstTexture);
++    D3D11_TEXTURE2D_DESC dstDesc = {};
++    dstTexture->GetDesc(&dstDesc);
++    dstTexture->Release();
++
++    D3D11_TEXTURE2D_DESC desc = {};
++    texture->GetDesc(&desc);
++
++    ID3D11DeviceContext *d3dDeviceContext = renderer11->getDeviceContext();
++    // texture = getTexture(desc, d3dDevice, d3dDeviceContext);
++    // d3dDeviceContext->CopyResource(dstResource, texture);
++    d3dDeviceContext->CopySubresourceRegion(
++        dstResource, 0, 0, 0, 0, texture /*getTexture(desc, d3dDevice, d3dDeviceContext)*/, 0,
++        nullptr);
++    texture->Release();
++
++    return GL_TRUE;
++}
++
++}  // extern "C"
+diff --git a/src/libGLESv2/entry_points_magic.h b/src/libGLESv2/entry_points_magic.h
+new file mode 100644
+index 000000000..5a2ffb2d4
+--- /dev/null
++++ b/src/libGLESv2/entry_points_magic.h
+@@ -0,0 +1,19 @@
++#ifndef LIBGLESV2_ENTRYPOINTSMAGIC_H_
++#define LIBGLESV2_ENTRYPOINTSMAGIC_H_
++
++#include <GLES2/gl2.h>
++#include <export.h>
++
++struct ID3D11Resource;
++
++extern "C" {
++
++// Magic
++ANGLE_EXPORT GLboolean GL_APIENTRY magicGetCurrentResource(GLenum target,
++                                                           GLint level,
++                                                           ID3D11Resource **resource,
++                                                           unsigned int *subresourceIndex);
++
++}  // extern "C"
++
++#endif  // LIBGLESV2_ENTRYPOINTSMAGIC_H_

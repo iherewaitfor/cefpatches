@@ -1,0 +1,38 @@
+diff --git a/src/libANGLE/renderer/d3d/DisplayD3D.h b/src/libANGLE/renderer/d3d/DisplayD3D.h
+index 29c0ddd72..d73d7959e 100644
+--- a/src/libANGLE/renderer/d3d/DisplayD3D.h
++++ b/src/libANGLE/renderer/d3d/DisplayD3D.h
+@@ -103,6 +103,8 @@ class DisplayD3D : public DisplayImpl, public d3d::Context
+ 
+     void populateFeatureList(angle::FeatureList *features) override;
+ 
++    rx::RendererD3D *getRenderer() const { return mRenderer; }
++
+   private:
+     void generateExtensions(egl::DisplayExtensions *outExtensions) const override;
+     void generateCaps(egl::Caps *outCaps) const override;
+diff --git a/src/libGLESv2.gni b/src/libGLESv2.gni
+index e18c61dc8..d97cf0dea 100644
+--- a/src/libGLESv2.gni
++++ b/src/libGLESv2.gni
+@@ -604,6 +604,8 @@ libglesv2_sources = [
+   "src/libGLESv2/entry_points_gles_3_2_autogen.h",
+   "src/libGLESv2/entry_points_gles_ext_autogen.cpp",
+   "src/libGLESv2/entry_points_gles_ext_autogen.h",
++  "src/libGLESv2/entry_points_magic.cpp",
++  "src/libGLESv2/entry_points_magic.h",
+   "src/libGLESv2/global_state.cpp",
+   "src/libGLESv2/global_state.h",
+   "src/libGLESv2/libGLESv2_autogen.cpp",
+diff --git a/src/libGLESv2/libGLESv2_autogen.def b/src/libGLESv2/libGLESv2_autogen.def
+index 0044c15ef..ccd8cd4c2 100644
+--- a/src/libGLESv2/libGLESv2_autogen.def
++++ b/src/libGLESv2/libGLESv2_autogen.def
+@@ -1280,3 +1280,6 @@ EXPORTS
+ 
+     ; EGL_NV_stream_consumer_gltexture_yuv
+     EGL_StreamConsumerGLTextureExternalAttribsNV
++
++    magicGetCurrentResource
++    magicTexBindSharedHandle
+\ No newline at end of file
