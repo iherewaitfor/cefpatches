@@ -1,0 +1,129 @@
+diff --git a/third_party/blink/renderer/modules/canvas/BUILD.gn b/third_party/blink/renderer/modules/canvas/BUILD.gn
+index ca6c394c989d6..6a5c2bd599182 100644
+--- a/third_party/blink/renderer/modules/canvas/BUILD.gn
++++ b/third_party/blink/renderer/modules/canvas/BUILD.gn
+@@ -25,6 +25,9 @@ blink_modules_sources("canvas") {
+     "canvas2d/canvas_path.h",
+     "canvas2d/canvas_pattern.cc",
+     "canvas2d/canvas_pattern.h",
++    "canvas2d/QcSharedMemory.h",
++    "canvas2d/sharedmemoryhelper.h",
++    "canvas2d/sharedmemoryhelper.cpp",
+     "canvas2d/canvas_rendering_context_2d.cc",
+     "canvas2d/canvas_rendering_context_2d.h",
+     "canvas2d/canvas_rendering_context_2d_state.cc",
+diff --git a/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc b/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
+index 4fedfa01924ed..03db4297ec242 100644
+--- a/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
++++ b/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
+@@ -2450,6 +2450,64 @@ void BaseRenderingContext2D::putImageData(ImageData* data,
+                         CanvasPerformanceMonitor::DrawType::kImageData);
+ }
+ 
++void BaseRenderingContext2D::putSharedMemImageData(const String& args, ExceptionState& exception_state) {
++  std::string key;
++  int offset = 0;
++  int width = 0;
++  int height = 0;
++  int pitch = 0;
++  if (!mycefdemo::SharedMemHelper::parseArgs(args.Latin1().c_str(), key, offset,
++                                             width, height, pitch)) {
++    return;
++  }
++  unsigned char* source = (unsigned char*)_sharedmemhelper.data(key, offset);
++  if (source == NULL) {
++    return;
++  }
++
++  do
++  {
++	int dx = 0;
++    int dy = 0;
++    int dirty_x = 0;
++    int dirty_y = 0;
++    int dirty_width = width;
++    int dirty_height = height;
++	uint8_t bytes_per_pixel = GetCanvas2DColorParams().BytesPerPixel();
++    int dataWidth = pitch/bytes_per_pixel;
++    int dataHeight = height;
++
++    bool hasResourceProvider = CanCreateCanvas2dResourceProvider();
++    if (!hasResourceProvider)
++      break;
++
++    IntRect dest_rect(dirty_x, dirty_y, dirty_width, dirty_height);
++    dest_rect.Intersect(IntRect(0, 0, dataWidth, dataHeight));
++    IntSize dest_offset(static_cast<int>(dx), static_cast<int>(dy));
++    dest_rect.Offset(dest_offset);
++    dest_rect.Intersect(IntRect(0, 0, Width(), Height()));
++    if (dest_rect.IsEmpty())
++      break;
++
++    IntRect source_rect(dest_rect);
++    source_rect.Offset(-dest_offset);
++
++    CheckOverdraw(dest_rect, nullptr,
++                  CanvasRenderingContext2DState::kOpaqueImage,
++                  OverdrawOp::kTotal);
++    SkImageInfo imageInfo = SkImageInfo::Make(width, height,
++                                 SkColorType::kRGBA_8888_SkColorType,
++                          SkAlphaType::kUnpremul_SkAlphaType);
++    SkPixmap skPixMap = SkPixmap(imageInfo, source, width * bytes_per_pixel);
++    PutByteArray(skPixMap, gfx::Rect(source_rect.x(), source_rect.y(), source_rect.width(), source_rect.height()),
++                 gfx::Vector2d(dest_offset.width(), dest_offset.height()));
++
++    GetPaintCanvasForDraw(IntRect(dest_rect),
++                        CanvasPerformanceMonitor::DrawType::kImageData);
++  }
++  while(false);
++}
++
+ void BaseRenderingContext2D::PutByteArray(const SkPixmap& source,
+                                           const gfx::Rect& source_rect,
+                                           const gfx::Vector2d& dest_offset) {
+diff --git a/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.h b/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.h
+index 113766dc3dc3b..a6cac2d3756bf 100644
+--- a/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.h
++++ b/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.h
+@@ -20,6 +20,8 @@
+ #include "third_party/blink/renderer/platform/bindings/exception_state.h"
+ #include "third_party/blink/renderer/platform/graphics/image_orientation.h"
+ 
++#include "sharedmemoryhelper.h"
++
+ namespace blink {
+ 
+ class CanvasImageSource;
+@@ -273,6 +275,8 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
+                     int dirty_width,
+                     int dirty_height,
+                     ExceptionState&);
++  void putSharedMemImageData(const String& args, ExceptionState&);
++  mycefdemo::SharedMemHelper _sharedmemhelper;
+ 
+   bool imageSmoothingEnabled() const;
+   void setImageSmoothingEnabled(bool);
+diff --git a/third_party/blink/renderer/modules/canvas/canvas2d/canvas_rendering_context_2d.idl b/third_party/blink/renderer/modules/canvas/canvas2d/canvas_rendering_context_2d.idl
+index a11aab48b263a..d2aad3d867da6 100644
+--- a/third_party/blink/renderer/modules/canvas/canvas2d/canvas_rendering_context_2d.idl
++++ b/third_party/blink/renderer/modules/canvas/canvas2d/canvas_rendering_context_2d.idl
+@@ -149,6 +149,7 @@ interface CanvasRenderingContext2D {
+     [RaisesException, RuntimeEnabled=CanvasColorManagement] ImageData getImageData([EnforceRange] long sx, [EnforceRange] long sy, [EnforceRange] long sw, [EnforceRange] long sh, ImageDataSettings imageDataSettings);
+     [RaisesException] void putImageData(ImageData imagedata, [EnforceRange] long dx, [EnforceRange] long dy);
+     [RaisesException] void putImageData(ImageData imagedata, [EnforceRange] long dx, [EnforceRange] long dy, [EnforceRange] long dirtyX, [EnforceRange] long dirtyY, [EnforceRange] long dirtyWidth, [EnforceRange] long dirtyHeight);
++	[RaisesException] void putSharedMemImageData(DOMString args);
+ 
+     // Context state
+     // Should be merged with WebGL counterpart in CanvasRenderingContext, once no-longer experimental
+diff --git a/third_party/blink/renderer/modules/canvas/offscreencanvas2d/offscreen_canvas_rendering_context_2d.idl b/third_party/blink/renderer/modules/canvas/offscreencanvas2d/offscreen_canvas_rendering_context_2d.idl
+index 3c8b31347060e..c188e3ed952e7 100644
+--- a/third_party/blink/renderer/modules/canvas/offscreencanvas2d/offscreen_canvas_rendering_context_2d.idl
++++ b/third_party/blink/renderer/modules/canvas/offscreencanvas2d/offscreen_canvas_rendering_context_2d.idl
+@@ -102,6 +102,7 @@
+     [HighEntropy, MeasureAs=OffscreenCanvasGetImageData, RaisesException, RuntimeEnabled=CanvasColorManagement] ImageData getImageData([EnforceRange] long sx, [EnforceRange] long sy, [EnforceRange] long sw, [EnforceRange] long sh, ImageDataSettings imageDataSettings);
+     [RaisesException] void putImageData(ImageData imagedata, [EnforceRange] long dx, [EnforceRange] long dy);
+     [RaisesException] void putImageData(ImageData imagedata, [EnforceRange] long dx, [EnforceRange] long dy, [EnforceRange] long dirtyX, [EnforceRange] long dirtyY, [EnforceRange] long dirtyWidth, [EnforceRange] long dirtyHeight);
++    [RaisesException] void putSharedMemImageData(DOMString args);
+ 
+     // Line caps/joins
+     attribute unrestricted double lineWidth; // (default 1)

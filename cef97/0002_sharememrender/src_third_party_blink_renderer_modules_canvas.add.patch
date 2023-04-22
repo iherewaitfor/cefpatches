@@ -1,0 +1,168 @@
+diff --git a/third_party/blink/renderer/modules/canvas/canvas2d/QcSharedMemory.h b/third_party/blink/renderer/modules/canvas/canvas2d/QcSharedMemory.h
+new file mode 100644
+index 0000000000000..831aebd526a82
+--- /dev/null
++++ b/third_party/blink/renderer/modules/canvas/canvas2d/QcSharedMemory.h
+@@ -0,0 +1,68 @@
++﻿#pragma once
++#include <windows.h>
++#include <string>
++#include <time.h>
++
++namespace mycefdemo {
++    class QcVideoSharedMemoryEx
++    {
++	public:
++		QcVideoSharedMemoryEx()
++		{
++			m_smHandle = NULL;
++			m_mem = NULL;
++		}
++		~QcVideoSharedMemoryEx()
++		{
++			clear();
++		}
++		bool attach(const std::string& key)
++		{
++			if (m_mem != NULL)
++			{
++				return true;
++			}
++			bool ret = false;
++			do
++			{
++				m_smHandle = OpenFileMappingA(FILE_MAP_READ, FALSE, key.c_str());
++                DWORD error = GetLastError();
++                UNREFERENCED_PARAMETER(error);
++				if (m_smHandle == NULL)
++					break;
++				m_mem = (void*)MapViewOfFile(m_smHandle, FILE_MAP_READ, 0, 0, 0);
++				if (m_mem == NULL)
++					break;
++				ret = true;
++			}
++			while(false);
++			if (!ret)
++			{
++				clear();
++			}
++			return ret;
++		}
++
++		void* data()
++		{
++			return m_mem;
++		}
++    private:
++		void clear()
++		{
++			if (m_mem != NULL)
++			{
++				UnmapViewOfFile(m_mem);
++				m_mem = NULL;
++			}
++			if (m_smHandle != NULL)
++			{
++				CloseHandle(m_smHandle);
++				m_smHandle = NULL;
++			}
++		}
++    private:
++		HANDLE m_smHandle;
++		void * m_mem;
++    };
++}
+diff --git a/third_party/blink/renderer/modules/canvas/canvas2d/sharedmemoryhelper.cpp b/third_party/blink/renderer/modules/canvas/canvas2d/sharedmemoryhelper.cpp
+new file mode 100644
+index 0000000000000..38c925eefcea2
+--- /dev/null
++++ b/third_party/blink/renderer/modules/canvas/canvas2d/sharedmemoryhelper.cpp
+@@ -0,0 +1,65 @@
++#include "sharedmemoryhelper.h"
++#include <string>
++#include <vector>
++
++namespace mycefdemo {
++    SharedMemHelper::SharedMemHelper() {}
++
++    SharedMemHelper::~SharedMemHelper()
++    {
++        if (!_qvsm.empty())
++        {
++            _qvsm.clear();
++        }
++    }
++
++	void *SharedMemHelper::data(const std::string& key, int offset)
++	{
++        std::shared_ptr<QcVideoSharedMemoryEx> video;
++        if (_qvsm.find(key) != _qvsm.end())
++        {
++            video = _qvsm.find(key)->second;
++        }
++        else
++        {
++            video = std::make_shared<QcVideoSharedMemoryEx>();
++            if (!video->attach(key))
++            {
++                return NULL;
++            }
++            if (_qvsm.size() > 10)
++            {
++                _qvsm.erase(_qvsm.begin());
++            }
++            _qvsm[key] = video;
++        }
++
++        return (char*)video->data() + offset;
++	}
++
++    bool SharedMemHelper::parseArgs(const char* args, std::string& oKey, int& oOffset, int& oWidth, int& oHeight, int& oPitch)
++    {
++        std::string line(args);
++        std::vector<std::string> argss;
++        size_t index = line.find('|');
++        while (index != line.npos)
++        {
++            std::string one = line.substr(0, index);
++            argss.push_back(one);
++            line = line.substr(index + 1);
++            index = line.find('|');
++        }
++        argss.push_back(line);
++        if (argss.size() < 5)
++        {
++            return false;
++        }
++        oKey = argss[0];
++        oOffset = std::atoi(argss[1].c_str());
++        oWidth = std::atoi(argss[2].c_str());
++        oHeight = std::atoi(argss[3].c_str());
++        oPitch = std::atoi(argss[4].c_str());
++        return true;
++    }
++
++}
+diff --git a/third_party/blink/renderer/modules/canvas/canvas2d/sharedmemoryhelper.h b/third_party/blink/renderer/modules/canvas/canvas2d/sharedmemoryhelper.h
+new file mode 100644
+index 0000000000000..f137b897f6a51
+--- /dev/null
++++ b/third_party/blink/renderer/modules/canvas/canvas2d/sharedmemoryhelper.h
+@@ -0,0 +1,17 @@
++#pragma once
++#include "QcSharedMemory.h"
++#include <map>
++#include <memory>
++#include <string>
++namespace mycefdemo {
++	class SharedMemHelper
++	{
++	public:
++        SharedMemHelper();
++		void *data(const std::string& key, int offset);
++        ~SharedMemHelper();
++		static bool parseArgs(const char* args, std::string& oKey, int& oOffset, int& oWidth, int& oHeight, int& oPitch);
++    private:
++        std::map<std::string, std::shared_ptr<QcVideoSharedMemoryEx>> _qvsm;
++	};
++}
