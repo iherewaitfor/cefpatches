@@ -100,11 +100,65 @@ void WebGLRenderingContextBase::texBindSharedHandle(ExecutionContext*,
 }
 ```
 ## 2. 添加gpu command处理
-Gpu Command生成和处理，主要是在render进程中根据业务需要生成GPU指针，然后将指令传到GPU进程中，在GPU进程进行具体的GPU操作。本功能中，是要将业务传的共享纹理句柄传入，以便在gpu进程中，能读取该共享纹理的数据进程渲染。
+Gpu Command生成和处理，主要是在render进程中根据业务需要生成GPU命令，然后命令传到GPU进程中，在GPU进程进行具体的GPU操作。本功能中，是要将业务传的共享纹理句柄传入，以便在gpu进程中，能读取该共享纹理的数据进程渲染。
 
 GPU Command的原理参考[https://www.chromium.org/developers/design-documents/gpu-command-buffer/](https://www.chromium.org/developers/design-documents/gpu-command-buffer/).
 
+## GPU Command Buffer原理
+GPU Command Buffer实现原理：
+其基本实现是一个叫"command buffer"( 命令缓冲)。客户端（render进程、pepper plugin等）写命令到一些共享内存。其更新一个'put'指针，通过IPC告诉GPU进程 它已经写到缓冲区的多远的位置了。GPU进程 或者是服务会从buffer（缓冲区）中读取这些命令。对于每个命令，它都会验证命令、参数以及参数是否适合操作系统图形API的当前状态 ，然后才对操作系统进行实际调用。This means even a compromised renderer running native code, writing its own commands, can hopefully not get the GPU process to call the graphics system in such a way as to compromise the system.
+在编写新的服务端代码时，请记住这一点。永远不要设计一个要求客户端表现良好的新命令。要假定客户端可以变得无赖。例如，确保无论客户做什么，服务的记账都不会出错。
 
+API层的实现：
 
+简要说：
+gl2.h->gles2_c_lib.cc->GLES2Implemetation->GLES2CmdHelper...SharedMemory...->GLES2DecoderImpl->ui/gfx/gl/gl_bindings->OpenGL
+
+有一个接口CommandBuffer，负责协调GLES2CmdHelpe和GLES2DecoderImpl之间的通信。它有创建和删除共享内存的方法，以及来回通信当前状态的方法。特别是通过AsyncFlush()或Flush()从客户端发送最新的'put'指针，并通过'Flush'的结果获取最新的"get"指针。
+
+一个名为CommandBufferService的CommandBuffer实现直接与GLES2DecoderImpl对话。如果你有一个单线程单进程的chrome，你可以将CommandBufferService的一个实例传递给GLES2CmdHelper，该想法是一切都会正常运行。在真正的多进程chrome中，还有另一种实现，CommandBufferProx，它使用IPC通过GpuCommandBufferStub到GpuSchedler再到CommandBufferService从客户端到服务进程通信。
+
+### 客户端代码（在render进程）
+注意： 在src/gpu/command_buffer/client and src/gpu/command_buffer/common 中的所有代码都必须不依赖任何额外的库进行编译，因为他们是被用在不信任的 Pepper plugin中的。
+以khronos为例（注意本dx11共享纹理patch项目实现用的是angle）
+
+- 定义public OpenGL ES 2.0接口
+
+src/third_party/khronos/GLES2/gl2.h
+
+src/third_party/khronos/GLES2/gl2ext.h
+
+- 以下定义C接口。大多数是自动生成的
+
+src/gpu/command_buffer/client/gles2_c_lib.cc
+
+src/gpu/command_buffer/client/gles2_c_lib_autogen.h
+
+- 以下是命令到command buffer的实现客户端侧的实现。大部分是自动生成的。
+
+src/gpu/command_buffer/client/gles2_implementation.cc
+
+src/gpu/command_buffer/client/gles2_implementation_autogen.h
+
+- 这是一个主要是自动生成的类，用于帮助格式化命令。
+
+src/gpu/command_buffer/client/gles2_cmd_helper.h
+
+src/gpu/command_buffer/client/gles2_cmd_helper_autogen.h
+
+- 这些定义了命令的实际格式
+
+src/gpu/command_buffer/common/cmd_buffer_common.h
+
+src/gpu/command_buffer/common/gles2_cmd_format.h
+
+src/gpu/command_buffer/common/gles2_cmd_format_autogen.h
+
+### 服务端代码（在gpu进程）
+- 这是读取命令、验证和调用OpenGL的代码。
+
+src/gpu/command_buffer/service/gles2_cmd_decoder.cc
+
+src/gpu/command_buffer/service/gles2_cmd_decoder_autogen.cc
 
 ## 3. angle添加接口实现_复制共享纹理
