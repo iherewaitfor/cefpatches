@@ -99,6 +99,7 @@ void WebGLRenderingContextBase::texBindSharedHandle(ExecutionContext*,
   ContextGL()->TexBindSharedHandle((GLintptr)handle);
 }
 ```
+在该方法实现中，调用 了GLES2Interface接口的TextBindShareHandle方法。在后续步骤描述怎么在GLES2Interface中添加方法。
 ## 2. 添加gpu command处理
 Gpu Command生成和处理，主要是在render进程中根据业务需要生成GPU命令，然后命令传到GPU进程中，在GPU进程进行具体的GPU操作。本功能中，是要将业务传的共享纹理句柄传入，以便在gpu进程中，能读取该共享纹理的数据进程渲染。
 
@@ -161,4 +162,213 @@ src/gpu/command_buffer/service/gles2_cmd_decoder.cc
 
 src/gpu/command_buffer/service/gles2_cmd_decoder_autogen.cc
 
+## 添加
+我们在web接口WebGLRenderingContextBase::texBindSharedHandle中调用了GLES2Interface接口的TextBindShareHandle方法。
+结合gpu command buffer，讲具体 实现。
+
+具体涉及的文件有
+
+客户端：(render进程)
+
+src/gpu/command_buffer/client/gles2_interface.h
+
+src/gpu/command_buffer/client/gles2_cmd_helper.cc
+
+src/gpu/command_buffer/client/gles2_cmd_helper.h
+
+src/gpu/command_buffer/client/gles2_implementation.h
+
+src/gpu/command_buffer/client/gles2_implementation.cc
+
+src/gpu/command_buffer/client/gles2_trace_implementation.h
+
+src/gpu/command_buffer/client/gles2_trace_implementation.cc
+
+src/gpu/command_buffer/common/gles2_cmd_format.h
+
+src/gpu/command_buffer/common/gles2_cmd_ids.h
+
+
+服务端：（gpu进程）
+
+src/gpu/command_buffer/service/gles2_cmd_decoder.cc
+
+src/gpu/command_buffer/service/gles2_cmd_decoder_passthrough.cc
+
+src/gpu/command_buffer/service/gles2_cmd_decoder_passthrough.h
+
+src/gpu/command_buffer/service/gles2_cmd_decoder_passthrough_doers.cc
+
+### gles2_interface.h
+src/gpu/command_buffer/client/gles2_interface.h
+用于定义新加的公开接口
+
+添加代码
+```C++
+virtual void TexBindSharedHandle(GLintptr handle) = 0;
+```
+### gles2_cmd_format.h
+src/gpu/command_buffer/common/gles2_cmd_format.h
+
+该文件用于描述命令的结构。用于申请命令内存大小。
+结构写法，可以参考
+src\gpu\command_buffer\common\gles2_cmd_format_autogen.h
+中的固定的命令的写法。里面有weggl的常用接口的命令的写法，如ActiveTexture、BindBuffer、TexImage2D等。
+
+其中CommandId kCmdId，自己定义，写了一个比较大的枚举值。大于可能存在的命令的数值即可。这里取的是2000。
+
+```C++
+
+struct TexBindSharedHandle {
+  typedef TexBindSharedHandle ValueType;
+  static const CommandId kCmdId = (CommandId)kTexBindSharedHandle;
+  static const cmd::ArgFlags kArgFlags = cmd::kFixed;
+  static const uint8_t cmd_flags = CMD_FLAG_SET_TRACE_LEVEL(1);
+
+  static uint32_t ComputeSize() {
+    return static_cast<uint32_t>(sizeof(ValueType));  // NOLINT
+  }
+
+  void SetHeader() { header.SetCmd<ValueType>(); }
+
+  void Init(GLintptr _handle) {
+    SetHeader();
+    handle = _handle;
+  }
+
+  void* Set(void* cmd,
+            GLintptr _handle) {
+    static_cast<ValueType*>(cmd)->Init(_handle);
+    return NextCmdAddress<ValueType>(cmd);
+  }
+
+  gpu::CommandHeader header;
+  GLintptr handle;
+  static const int32_t border = 0;
+};
+
+static_assert(sizeof(TexBindSharedHandle) == 8,
+              "size of TexBindSharedHandle should be 8");
+static_assert(offsetof(TexBindSharedHandle, header) == 0,
+              "offset of TexBindSharedHandle header should be 0");
+static_assert(offsetof(TexBindSharedHandle, handle) == 4,
+              "offset of TexBindSharedHandle handle should be 4");
+```
+### gles2_cmd_ids.h
+src/gpu/command_buffer/common/gles2_cmd_ids.h
+
+新增枚举值作为命令ID。
+
+```C++
+=enum {
+    kTexBindSharedHandle = 2000,
+};
+```
+### gles2_implementation.h
+src/gpu/command_buffer/client/gles2_implementation.h
+
+用于客户端发出命令的。添加方法。
+```C++
+void TexBindSharedHandle(GLintptr handle) override;
+```
+### gles2_implementation.cc
+src/gpu/command_buffer/client/gles2_implementation.cc
+发出命令实现。
+```C++
+void GLES2Implementation::TexBindSharedHandle(GLintptr handle) {
+  GPU_CLIENT_SINGLE_THREAD_CHECK();
+  GPU_CLIENT_LOG("[" << GetLogPrefix() << "] TexBindSharedHandle(" << handle
+                     << ")");
+  helper_->TexBindSharedHandle(handle);
+  CheckGLError();
+}
+```
+### gles2_cmd_helper.h
+src/gpu/command_buffer/client/gles2_cmd_helper.h
+
+用于帮助格式化命令。声明方法。
+
+```C++
+ void TexBindSharedHandle(GLintptr handle);
+```
+### gles2_cmd_helper.cc
+src/gpu/command_buffer/client/gles2_cmd_helper.cc
+
+用于帮助格式化命令。方法实现。
+该文件用于将gpu命令写到cmdspace中。gpu进程到时会从cmdspace中取到这些命令去执行具体的gpu操作。
+helper的工作就是负责生成对应的command即可。command的具体 结构和大小写在gles2_cmd_format.h
+```C++
+void GLES2CmdHelper::TexBindSharedHandle(GLintptr handle) {
+  gles2::cmds::TexBindSharedHandle* c =
+      GetCmdSpace<gles2::cmds::TexBindSharedHandle>();
+  if (c) {
+    c->Init(handle);
+  }
+}
+```
+
+### gles2_cmd_decoder.cc
+src/gpu/command_buffer/service/gles2_cmd_decoder.cc
+使用自定义固定命令. 在GPU进程完成解码获取到render进程发过来的命令.然后执行该命令在GPU进程中的实现.
+本功能的实现是调用在angle中实现共享纹理复制.
+
+#### 1 添加函数定义声明
+在2595行添加
+```C++
+  Error HandleTexBindSharedHandle(uint32_t immediate_data_size,
+                                  const volatile void* data);
+```
+#### 2 命令信息数组长度加1
+因为我们自定义加了一个命令。需要把命令信息数组长度加1.
+需要把
+```C++
+  // A table of CommandInfo for all the commands.
+  static const CommandInfo command_info[kNumCommands - kFirstGLES2Command ];
+```
+改为
+```C++
+// A table of CommandInfo for all the commands.
+  static const CommandInfo command_info[kNumCommands - kFirstGLES2Command + 1];
+```
+#### 3 把新加命令加入到命令信息数据
+找到constexpr GLES2DecoderImpl::CommandInfo GLES2DecoderImpl::command_info[]
+在
+  , /* NOLINT */
+    GLES2_COMMAND_LIST(GLES2_CMD_OP)
+之后加入
+（在2883行添加）
+```
+    GLES2_CMD_OP(TexBindSharedHandle)
+```
+#### 4 修改命令索引获取
+把template <bool DebugImpl>
+error::Error GLES2DecoderImpl::DoCommandsImpl(
+函数中的
+文件的5936行改为
+```C++
+    unsigned int command_index = command - (command < kNumCommands ? 0 : kTexBindSharedHandle - kNumCommands) - kFirstGLES2Command;
+```
+可以将新增的命令的枚举值，转换到命令信息数组中的索引。
+
+#### 5 添加命令处理函数
+
+在20301行添加
+```C++
+error::Error GLES2DecoderImpl::HandleTexBindSharedHandle(
+    uint32_t immediate_data_size,
+    const volatile void* cmd_data) {
+  const volatile cmds::TexBindSharedHandle& c =
+      *static_cast<const volatile cmds::TexBindSharedHandle*>(cmd_data);
+
+  typedef GLboolean(__stdcall * func)(GLintptr handle);
+  func magicTexBindSharedHandleFn =
+      reinterpret_cast<func>(gl::GetGLProcAddress("magicTexBindSharedHandle"));
+  if (magicTexBindSharedHandleFn == NULL) {
+    return error::kUnknownCommand;
+  }
+  magicTexBindSharedHandleFn(c.handle);
+  return error::kNoError;
+}
+```
 ## 3. angle添加接口实现_复制共享纹理
+
