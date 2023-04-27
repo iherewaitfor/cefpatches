@@ -372,6 +372,10 @@ error::Error GLES2DecoderImpl::HandleTexBindSharedHandle(
 ```
 ## 3. angle添加接口实现_复制共享纹理
 
+在angle中添加magicTexBindSharedHandle入口,以便在angle中实现纹理复制功能。
+在gles2_cmd_decoder.cc中通过gl::GetGLProcAddress("magicTexBindSharedHandle")获取到新导出函数地址。
+
+
 涉及修改的文件
 
 \src\third_party\angle\src/libGLESv2/libGLESv2_autogen.def
@@ -387,6 +391,38 @@ error::Error GLES2DecoderImpl::HandleTexBindSharedHandle(
 \src\third_party\angle\src/libGLESv2/entry_points_magic.cpp
 
 
+其中libGLESv2.gni修改加入新添加的入口文件，进行构建。 libGLESv2_autogen.def加入新的导出函数，以便相关导出对应的代码生成，让能通过gl::GetGLProcAddress("magicTexBindSharedHandle")取到函数地址。
+
+### libGLESv2_autogen.def
+\src\third_party\angle\src/libGLESv2/libGLESv2_autogen.def
+
+新加入
+```
+    magicGetCurrentResource
+    magicTexBindSharedHandle
+```
+### libGLESv2.gni
+\src\third_party\angle\src\libGLESv2.gni
+```
+  "src/libGLESv2/entry_points_magic.cpp",
+  "src/libGLESv2/entry_points_magic.h",
+```
+
+### DisplayD3D.h
+\src\third_party\angle/src/libANGLE/renderer/d3d/DisplayD3D.h
+
+加入函数：
+
+```
+rx::RendererD3D *getRenderer() const { return mRenderer; }
+```
+
+### 新添加导出函数
+\src\third_party\angle\src/libGLESv2/entry_points_magic.h
+
+\src\third_party\angle\src/libGLESv2/entry_points_magic.cpp
+
+可以参考同文件夹下其他enty_points文件。
 
 
 
