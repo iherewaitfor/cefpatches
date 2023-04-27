@@ -372,3 +372,22 @@ error::Error GLES2DecoderImpl::HandleTexBindSharedHandle(
 ```
 ## 3. angle添加接口实现_复制共享纹理
 
+涉及修改的文件
+
+\src\third_party\angle\src/libGLESv2/libGLESv2_autogen.def
+
+\src\third_party\angle\src\libGLESv2.gni
+
+\src\third_party\angle/src/libANGLE/renderer/d3d/DisplayD3D.h
+
+添加新文件
+
+\src\third_party\angle\src/libGLESv2/entry_points_magic.h
+
+\src\third_party\angle\src/libGLESv2/entry_points_magic.cpp
+
+
+
+
+
+
