@@ -1,0 +1,44 @@
+diff --git a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
+index 12c815ab6f5de..2a94d0aa67b5c 100644
+--- a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
++++ b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
+@@ -7184,6 +7184,15 @@ void WebGLRenderingContextBase::texBindSharedHandle(ExecutionContext*,
+   ContextGL()->TexBindSharedHandle((GLintptr)handle);
+ }
+ 
++ScriptValue WebGLRenderingContextBase::getDXVersion(ScriptState* script_state) {
++  if (isContextLost())
++    return WebGLAny(script_state, 0);
++
++  GLint value = 0;
++  ContextGL()->GetDXVersion(&value);
++  return WebGLAny(script_state, static_cast<int>(value));
++}
++
+ // Added to provide a unified interface with CanvasRenderingContext2D. Prefer
+ // calling forceLostContext instead.
+ void WebGLRenderingContextBase::LoseContext(LostContextMode mode) {
+diff --git a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.h b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.h
+index fd2370d5aa68a..bea3b98070375 100644
+--- a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.h
++++ b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.h
+@@ -565,6 +565,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
+   void viewport(GLint x, GLint y, GLsizei width, GLsizei height);
+ 
+   void texBindSharedHandle(ExecutionContext*, int64_t handle, ExceptionState&);
++  ScriptValue getDXVersion(ScriptState*);
+ 
+   // WEBGL_lose_context support
+   enum AutoRecoveryMethod {
+diff --git a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.idl b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.idl
+index 52f128ccacd96..091c218c8fe6a 100644
+--- a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.idl
++++ b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.idl
+@@ -713,6 +713,7 @@ interface mixin WebGLRenderingContextBase {
+     [NoAllocDirectCall] void viewport(GLint x, GLint y, GLsizei width, GLsizei height);
+ 	
+ 	[CallWith=ExecutionContext, RaisesException] void texBindSharedHandle(GLintptr handle);
++	[CallWith=ScriptState] any getDXVersion();
+ 
+     [RuntimeEnabled=OffscreenCanvasCommit] void commit();
+ 

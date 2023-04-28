@@ -1,0 +1,319 @@
+diff --git a/gpu/command_buffer/client/gles2_cmd_helper.cc b/gpu/command_buffer/client/gles2_cmd_helper.cc
+index 4004a0471a279..883b14e87372a 100644
+--- a/gpu/command_buffer/client/gles2_cmd_helper.cc
++++ b/gpu/command_buffer/client/gles2_cmd_helper.cc
+@@ -20,6 +20,14 @@ void GLES2CmdHelper::TexBindSharedHandle(GLintptr handle) {
+     c->Init(handle);
+   }
+ }
++
++void GLES2CmdHelper::GetDXVersion(uint32_t params_shm_id,
++                                 uint32_t params_shm_offset) {
++  gles2::cmds::GetDXVersion* c = GetCmdSpace<gles2::cmds::GetDXVersion>();
++  if (c) {
++    c->Init(params_shm_id, params_shm_offset);
++  }
++}
+ }  // namespace gles2
+ }  // namespace gpu
+ 
+diff --git a/gpu/command_buffer/client/gles2_cmd_helper.h b/gpu/command_buffer/client/gles2_cmd_helper.h
+index 36b6981fa2087..94be75895ce4a 100644
+--- a/gpu/command_buffer/client/gles2_cmd_helper.h
++++ b/gpu/command_buffer/client/gles2_cmd_helper.h
+@@ -33,6 +33,8 @@ class GPU_GLES2_EXPORT GLES2CmdHelper : public CommandBufferHelper {
+   // Helpers that could not be auto-generated.
+ 
+   void TexBindSharedHandle(GLintptr handle);
++  void GetDXVersion(uint32_t params_shm_id,
++                   uint32_t params_shm_offset);
+ };
+ 
+ }  // namespace gles2
+diff --git a/gpu/command_buffer/client/gles2_implementation.cc b/gpu/command_buffer/client/gles2_implementation.cc
+index 7127a034127b0..2916a6a9d552c 100644
+--- a/gpu/command_buffer/client/gles2_implementation.cc
++++ b/gpu/command_buffer/client/gles2_implementation.cc
+@@ -502,6 +502,28 @@ void GLES2Implementation::TexBindSharedHandle(GLintptr handle) {
+   CheckGLError();
+ }
+ 
++void GLES2Implementation::GetDXVersion(GLint* params) {
++  GPU_CLIENT_SINGLE_THREAD_CHECK();
++  GPU_CLIENT_LOG("[" << GetLogPrefix() << "] IsFuncExist("
++                     << static_cast<const void*>(params)
++                     << ")");
++  typedef cmds::GetDXVersion::Result Result;
++  auto result = GetResultAs<Result>();
++  if (!result) {
++    return;
++  }
++  result->SetNumResults(0);
++  helper_->GetDXVersion( GetResultShmId(), result.offset());
++  WaitForCmd();
++  result->CopyResult(params);
++  GPU_CLIENT_LOG_CODE_BLOCK({
++    for (int32_t i = 0; i < result->GetNumResults(); ++i) {
++      GPU_CLIENT_LOG("  " << i << ": " << result->GetData()[i]);
++    }
++  });
++  CheckGLError();
++}
++
+ GLuint GLES2Implementation::CreateGpuFenceCHROMIUM() {
+   GLuint client_id = GetIdAllocator(IdNamespaces::kGpuFences)
+                          ->AllocateIDAtOrAbove(last_gpu_fence_id_ + 1);
+diff --git a/gpu/command_buffer/client/gles2_implementation.h b/gpu/command_buffer/client/gles2_implementation.h
+index 2e3486a6ef27b..352a8d9cf95f6 100644
+--- a/gpu/command_buffer/client/gles2_implementation.h
++++ b/gpu/command_buffer/client/gles2_implementation.h
+@@ -110,6 +110,7 @@ class GLES2_IMPL_EXPORT GLES2Implementation : public GLES2Interface,
+   #include "gpu/command_buffer/client/gles2_implementation_autogen.h"
+ 
+   void TexBindSharedHandle(GLintptr handle) override;
++  void GetDXVersion(GLint* params) override;
+ 
+   // ContextSupport implementation.
+   void SetAggressivelyFreeResources(bool aggressively_free_resources) override;
+diff --git a/gpu/command_buffer/client/gles2_interface.h b/gpu/command_buffer/client/gles2_interface.h
+index efb135e7dc7a3..e1586c54f5078 100644
+--- a/gpu/command_buffer/client/gles2_interface.h
++++ b/gpu/command_buffer/client/gles2_interface.h
+@@ -53,6 +53,7 @@ class GLES2Interface : public InterfaceBase {
+   #include "gpu/command_buffer/client/gles2_interface_autogen.h"
+ 
+     virtual void TexBindSharedHandle(GLintptr handle) = 0;
++	virtual void GetDXVersion(GLint* params) = 0;
+ };
+ 
+ }  // namespace gles2
+diff --git a/gpu/command_buffer/client/gles2_trace_implementation.cc b/gpu/command_buffer/client/gles2_trace_implementation.cc
+index 805c9353f8ff0..0559b48902cde 100644
+--- a/gpu/command_buffer/client/gles2_trace_implementation.cc
++++ b/gpu/command_buffer/client/gles2_trace_implementation.cc
+@@ -37,6 +37,9 @@ void GLES2TraceImplementation::TexBindSharedHandle(GLintptr handle) {
+   // TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::TexBindSharedHandle");
+   gl_->TexBindSharedHandle(handle);
+ }
++void GLES2TraceImplementation::GetDXVersion(GLint* params) {
++  gl_->GetDXVersion(params);
++}
+ 
+ // Include the auto-generated part of this file. We split this because it means
+ // we can easily edit the non-auto generated parts right here in this file
+diff --git a/gpu/command_buffer/client/gles2_trace_implementation.h b/gpu/command_buffer/client/gles2_trace_implementation.h
+index f1d4c568cf898..6893b854a18bc 100644
+--- a/gpu/command_buffer/client/gles2_trace_implementation.h
++++ b/gpu/command_buffer/client/gles2_trace_implementation.h
+@@ -31,6 +31,7 @@ class GLES2_IMPL_EXPORT GLES2TraceImplementation : public GLES2Interface {
+   #include "gpu/command_buffer/client/gles2_trace_implementation_autogen.h"
+ 
+   void TexBindSharedHandle(GLintptr handle) override;
++  void GetDXVersion(GLint* params) override;
+ 
+  private:
+   GLES2Interface* gl_;
+diff --git a/gpu/command_buffer/common/gles2_cmd_format.h b/gpu/command_buffer/common/gles2_cmd_format.h
+index 9e19bebb6b9bc..495a0adbf25f1 100644
+--- a/gpu/command_buffer/common/gles2_cmd_format.h
++++ b/gpu/command_buffer/common/gles2_cmd_format.h
+@@ -294,6 +294,46 @@ static_assert(offsetof(TexBindSharedHandle, header) == 0,
+               "offset of TexBindSharedHandle header should be 0");
+ static_assert(offsetof(TexBindSharedHandle, handle) == 4,
+               "offset of TexBindSharedHandle handle should be 4");
++			  
++struct GetDXVersion {
++  typedef GetDXVersion ValueType;
++  static const CommandId kCmdId = (CommandId)kGetDXVersion;
++  static const cmd::ArgFlags kArgFlags = cmd::kFixed;
++  static const uint8_t cmd_flags = CMD_FLAG_SET_TRACE_LEVEL(1);
++
++  typedef SizedResult<GLint> Result;
++
++  static uint32_t ComputeSize() {
++    return static_cast<uint32_t>(sizeof(ValueType));  // NOLINT
++  }
++
++  void SetHeader() { header.SetCmd<ValueType>(); }
++
++  void Init(uint32_t _params_shm_id, uint32_t _params_shm_offset) {
++    SetHeader();
++    params_shm_id = _params_shm_id;
++    params_shm_offset = _params_shm_offset; 
++  }
++
++  void* Set(void* cmd, uint32_t _params_shm_id, uint32_t _params_shm_offset){
++    static_cast<ValueType*>(cmd)->Init(_params_shm_id, _params_shm_offset);
++    return NextCmdAddress<ValueType>(cmd);
++  }
++
++  gpu::CommandHeader header;
++  uint32_t params_shm_id;
++  uint32_t params_shm_offset;
++};
++
++static_assert(sizeof(GetDXVersion) == 12,
++              "size of GetDXVersion should be 12");
++static_assert(offsetof(GetDXVersion, header) == 0,
++              "offset of GetDXVersion header should be 0");
++static_assert(offsetof(GetDXVersion, params_shm_id) == 4,
++              "offset of GetDXVersion params_shm_id should be 4");
++static_assert(offsetof(GetDXVersion, params_shm_offset) == 8,
++              "offset of GetDXVersion params_shm_offset should be 8");
++
+ #pragma pack(pop)
+ 
+ }  // namespace cmd
+diff --git a/gpu/command_buffer/common/gles2_cmd_ids.h b/gpu/command_buffer/common/gles2_cmd_ids.h
+index 47ff9432b0502..a321c4c215cbc 100644
+--- a/gpu/command_buffer/common/gles2_cmd_ids.h
++++ b/gpu/command_buffer/common/gles2_cmd_ids.h
+@@ -10,6 +10,7 @@
+ #include "gpu/command_buffer/common/cmd_buffer_common.h"
+ enum {
+     kTexBindSharedHandle = 2000,
++    kGetDXVersion = 2001,
+ };
+ 
+ namespace gpu {
+diff --git a/gpu/command_buffer/service/gles2_cmd_decoder.cc b/gpu/command_buffer/service/gles2_cmd_decoder.cc
+index f477395a37911..e8bf2e90676d9 100644
+--- a/gpu/command_buffer/service/gles2_cmd_decoder.cc
++++ b/gpu/command_buffer/service/gles2_cmd_decoder.cc
+@@ -2594,6 +2594,8 @@ class GLES2DecoderImpl : public GLES2Decoder,
+ 
+   Error HandleTexBindSharedHandle(uint32_t immediate_data_size,
+                                   const volatile void* data);
++  Error HandleGetDXVersion(uint32_t immediate_data_size,
++                          const volatile void* data);
+ 
+   // Generate a member function prototype for each command in an automated and
+   // typesafe way.
+@@ -2846,7 +2848,7 @@ class GLES2DecoderImpl : public GLES2Decoder,
+   };
+ 
+   // A table of CommandInfo for all the commands.
+-  static const CommandInfo command_info[kNumCommands - kFirstGLES2Command + 1];
++  static const CommandInfo command_info[kNumCommands - kFirstGLES2Command + 2];
+ 
+   // Most recent generation of the TextureManager.  If this no longer matches
+   // the current generation when our context becomes current, then we'll rebind
+@@ -2881,6 +2883,7 @@ constexpr GLES2DecoderImpl::CommandInfo GLES2DecoderImpl::command_info[] = {
+   , /* NOLINT */
+     GLES2_COMMAND_LIST(GLES2_CMD_OP)
+     GLES2_CMD_OP(TexBindSharedHandle)
++    GLES2_CMD_OP(GetDXVersion)
+ #undef GLES2_CMD_OP
+ };
+ 
+@@ -20314,6 +20317,35 @@ error::Error GLES2DecoderImpl::HandleTexBindSharedHandle(
+   return error::kNoError;
+ }
+ 
++error::Error GLES2DecoderImpl::HandleGetDXVersion(
++    uint32_t immediate_data_size,
++    const volatile void* cmd_data) {
++  const volatile gles2::cmds::GetDXVersion& c =
++      *static_cast<const volatile gles2::cmds::GetDXVersion*>(cmd_data);
++  typedef cmds::GetDXVersion::Result Result;
++  GLsizei num_values = 1;
++  uint32_t checked_size = 0;
++  if (!Result::ComputeSize(num_values).AssignIfValid(&checked_size)) {
++    return error::kOutOfBounds;
++  }
++  Result* result = GetSharedMemoryAs<Result*>(
++      c.params_shm_id, c.params_shm_offset, checked_size);
++  GLint* params = result ? result->GetData() : nullptr;
++  if (params == nullptr) {
++    return error::kOutOfBounds;
++  }
++  typedef GLuint(__stdcall * func)();
++  func magicGetDXVersion =
++      reinterpret_cast<func>(gl::GetGLProcAddress("magicGetDXVersion"));
++  if (magicGetDXVersion == NULL) {
++    *params = 0;
++  } else {
++    *params = (GLint)magicGetDXVersion();
++  }
++  result->SetNumResults(num_values);
++  return error::kNoError;
++}
++
+ error::Error GLES2DecoderImpl::HandleSetActiveURLCHROMIUM(
+     uint32_t immediate_data_size,
+     const volatile void* cmd_data) {
+diff --git a/gpu/command_buffer/service/gles2_cmd_decoder_passthrough.cc b/gpu/command_buffer/service/gles2_cmd_decoder_passthrough.cc
+index 99573c3718fef..4ad8d2f1dfd4d 100644
+--- a/gpu/command_buffer/service/gles2_cmd_decoder_passthrough.cc
++++ b/gpu/command_buffer/service/gles2_cmd_decoder_passthrough.cc
+@@ -3105,7 +3105,8 @@ bool GLES2DecoderPassthroughImpl::CheckErrorCallbackState() {
+ 
+ constexpr GLES2DecoderPassthroughImpl::CommandInfo
+     GLES2DecoderPassthroughImpl::command_info[] = {
+-        GLES2_COMMAND_LIST(GLES2_CMD_OP) GLES2_CMD_OP(TexBindSharedHandle)};
++        GLES2_COMMAND_LIST(GLES2_CMD_OP) GLES2_CMD_OP(TexBindSharedHandle)
++        GLES2_CMD_OP(GetDXVersion)};
+ 
+ #undef GLES2_CMD_OP
+ 
+diff --git a/gpu/command_buffer/service/gles2_cmd_decoder_passthrough.h b/gpu/command_buffer/service/gles2_cmd_decoder_passthrough.h
+index 5f9997eff0d65..851e25c35ff8a 100644
+--- a/gpu/command_buffer/service/gles2_cmd_decoder_passthrough.h
++++ b/gpu/command_buffer/service/gles2_cmd_decoder_passthrough.h
+@@ -543,6 +543,7 @@ class GPU_GLES2_EXPORT GLES2DecoderPassthroughImpl
+ 
+   GLES2_COMMAND_LIST(GLES2_CMD_OP)
+   GLES2_CMD_OP(TexBindSharedHandle)
++  GLES2_CMD_OP(GetDXVersion)
+ #undef GLES2_CMD_OP
+ 
+   using CmdHandler =
+@@ -558,7 +559,7 @@ class GPU_GLES2_EXPORT GLES2DecoderPassthroughImpl
+   };
+ 
+   // A table of CommandInfo for all the commands.
+-  static const CommandInfo command_info[kNumCommands - kFirstGLES2Command + 1];
++  static const CommandInfo command_info[kNumCommands - kFirstGLES2Command + 2];
+ 
+   // The GLApi to make the gl calls on.
+   gl::GLApi* api_ = nullptr;
+diff --git a/gpu/command_buffer/service/gles2_cmd_decoder_passthrough_doers.cc b/gpu/command_buffer/service/gles2_cmd_decoder_passthrough_doers.cc
+index c6cf59d630452..3f599aa779f7d 100644
+--- a/gpu/command_buffer/service/gles2_cmd_decoder_passthrough_doers.cc
++++ b/gpu/command_buffer/service/gles2_cmd_decoder_passthrough_doers.cc
+@@ -5465,6 +5465,35 @@ error::Error GLES2DecoderPassthroughImpl::HandleTexBindSharedHandle(
+   return error::kNoError;
+ }
+ 
++error::Error GLES2DecoderPassthroughImpl::HandleGetDXVersion(
++    uint32_t immediate_data_size,
++    const volatile void* cmd_data) {
++  const volatile gles2::cmds::GetDXVersion& c =
++      *static_cast<const volatile gles2::cmds::GetDXVersion*>(cmd_data);
++  typedef cmds::GetDXVersion::Result Result;
++  unsigned int buffer_size = 0;
++  Result* result = GetSharedMemoryAndSizeAs<Result*>(
++      c.params_shm_id, c.params_shm_offset, sizeof(Result), &buffer_size);
++  GLsizei bufsize = Result::ComputeMaxResults(buffer_size);
++  if (bufsize < 1) {
++    return error::kOutOfBounds;
++  }
++  GLint* params = result ? result->GetData() : nullptr;
++  if (params == nullptr) {
++    return error::kOutOfBounds;
++  }
++  typedef GLuint(__stdcall * func)();
++  func magicGetDXVersion =
++      reinterpret_cast<func>(gl::GetGLProcAddress("magicGetDXVersion"));
++  if (magicGetDXVersion == NULL) {
++    *params = 0;
++  } else {
++    *params = (GLint)magicGetDXVersion();
++  }
++  result->SetNumResults(1);
++  return error::kNoError;
++}
++
+ error::Error
+ GLES2DecoderPassthroughImpl::DoBeginBatchReadAccessSharedImageCHROMIUM() {
+   DCHECK(group_->shared_image_manager());

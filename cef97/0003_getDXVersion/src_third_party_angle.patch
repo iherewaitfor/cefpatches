@@ -1,0 +1,47 @@
+diff --git a/src/libGLESv2/entry_points_magic.cpp b/src/libGLESv2/entry_points_magic.cpp
+index b6e70e4d9..591f65630 100644
+--- a/src/libGLESv2/entry_points_magic.cpp
++++ b/src/libGLESv2/entry_points_magic.cpp
+@@ -163,5 +163,29 @@ ANGLE_EXPORT GLboolean GL_APIENTRY magicTexBindSharedHandle(GLintptr handle)
+ 
+     return GL_TRUE;
+ }
++ANGLE_EXPORT GLuint GL_APIENTRY magicGetDXVersion()
++{
++    ANGLE_SCOPED_GLOBAL_LOCK();
++
++    gl::Context *context = gl::GetValidGlobalContext();
++    if (!context)
++        return 0;
++
++    egl::Display *display = context->getDisplay();
++    if (display == EGL_NO_DISPLAY)
++        return 0;
++
++    const EGLint deviceType = display->getDevice()->getType();
++    if (deviceType == EGL_D3D11_DEVICE_ANGLE)
++    {
++        return 1;
++    }
++    else if (deviceType == EGL_D3D9_DEVICE_ANGLE)
++    {
++        return 2;
++    }
++
++    return 0;
++}
+ 
+ }  // extern "C"
+diff --git a/src/libGLESv2/libGLESv2_autogen.def b/src/libGLESv2/libGLESv2_autogen.def
+index ccd8cd4c2..a8a7fbf1c 100644
+--- a/src/libGLESv2/libGLESv2_autogen.def
++++ b/src/libGLESv2/libGLESv2_autogen.def
+@@ -1282,4 +1282,5 @@ EXPORTS
+     EGL_StreamConsumerGLTextureExternalAttribsNV
+ 
+     magicGetCurrentResource
+-    magicTexBindSharedHandle
+\ No newline at end of file
++    magicTexBindSharedHandle
++	magicGetDXVersion
+\ No newline at end of file

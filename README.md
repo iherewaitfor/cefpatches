@@ -162,7 +162,7 @@ src/gpu/command_buffer/service/gles2_cmd_decoder.cc
 
 src/gpu/command_buffer/service/gles2_cmd_decoder_autogen.cc
 
-## 添加
+## 添加TextBindShareHandle
 我们在web接口WebGLRenderingContextBase::texBindSharedHandle中调用了GLES2Interface接口的TextBindShareHandle方法。
 结合gpu command buffer，讲具体 实现。
 
@@ -424,6 +424,142 @@ rx::RendererD3D *getRenderer() const { return mRenderer; }
 
 可以参考同文件夹下其他enty_points文件。
 
+# 0003_dxVersion给cef97添加dx版本判断。
+cef97中，有window中使用webgl的带硬件加速的实现是通过angle实现的，而 angle的具体实现可能是通过DX11或者是DX9。
+可以参考0001_dx11sharetexture中。1、添加web接口。2、添加gpu command buffer。这两部分。
+
+涉及修改的文件
+## 添加web 接口
+添加webgl_render_context的web接口：dxVersion()
+
+涉及的文件有
+
+- src/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.idl
+- src/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.h
+- src/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
+
+### webgl_rendering_context_base.idl
+src/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.idl
 
 
+## 添加gpu command buffer处理
+添加GetDXVersion命令
 
+涉及的文件：
+
+客户端：(render进程)
+
+src/gpu/command_buffer/client/gles2_interface.h
+
+src/gpu/command_buffer/client/gles2_cmd_helper.cc
+
+src/gpu/command_buffer/client/gles2_cmd_helper.h
+
+src/gpu/command_buffer/client/gles2_implementation.h
+
+src/gpu/command_buffer/client/gles2_implementation.cc
+
+src/gpu/command_buffer/client/gles2_trace_implementation.h
+
+src/gpu/command_buffer/client/gles2_trace_implementation.cc
+
+src/gpu/command_buffer/common/gles2_cmd_format.h
+
+src/gpu/command_buffer/common/gles2_cmd_ids.h
+
+
+服务端：（gpu进程）
+
+src/gpu/command_buffer/service/gles2_cmd_decoder.cc
+
+src/gpu/command_buffer/service/gles2_cmd_decoder_passthrough.cc
+
+src/gpu/command_buffer/service/gles2_cmd_decoder_passthrough.h
+
+src/gpu/command_buffer/service/gles2_cmd_decoder_passthrough_doers.cc
+
+各文件修改含义请参考0001_dx11sharetexture，逻辑类似。
+### gles2_interface.h
+src/gpu/command_buffer/client/gles2_interface.h
+### gles2_cmd_ids.h
+src/gpu/command_buffer/common/gles2_cmd_ids.h
+### gles2_cmd_format.h
+src/gpu/command_buffer/common/gles2_cmd_format.h
+### gles2_implementation.h
+src/gpu/command_buffer/client/gles2_implementation.h
+### gles2_implementation.cc
+src/gpu/command_buffer/client/gles2_implementation.cc
+### gles2_trace_implementation.h
+src/gpu/command_buffer/client/gles2_trace_implementation.h
+### gles2_trace_implementation.cc
+src/gpu/command_buffer/client/gles2_trace_implementation.cc
+
+### gles2_cmd_decoder.cc
+src/gpu/command_buffer/service/gles2_cmd_decoder.cc
+### gles2_cmd_decoder_passthrough.cc
+src/gpu/command_buffer/service/gles2_cmd_decoder_passthrough.cc
+### gles2_cmd_decoder_passthrough.h
+src/gpu/command_buffer/service/gles2_cmd_decoder_passthrough.h
+### gles2_cmd_decoder_passthrough_doers.cc
+src/gpu/command_buffer/service/gles2_cmd_decoder_passthrough_doers.cc
+
+
+## 3. angle添加接口实现_获取angle内部使用的DX版本。
+
+
+涉及修改的文件
+
+\src\third_party\angle\src/libGLESv2/libGLESv2_autogen.def
+
+\src\third_party\angle\src/libGLESv2/entry_points_magic.cpp
+
+## 编译
+在D:\libcef4692\chromium_git\chromium\src目录运行。
+
+set DEPOT_TOOLS_WIN_TOOLCHAIN=0
+ninja -C out\Debug_GN_x86 cef
+## 各部分修改取patch
+本功能实现没有新加文件。全部为文件修改。取了3个patch.
+### src_gpu_command_buffer.patch
+在src/gpu/command_buffer目录下运行
+```
+git diff . > src_gpu_command_buffer.patch
+```
+实际执行：请根据自己的实际目录修改。
+```
+D:\libcef4692\chromium_git\chromium\src\gpu\command_buffer>git diff . > D:\srccode\cefpatches\cef97\0003_getDXVersion\src_gpu_command_buffer.patch
+```
+### src_third_party_blink_renderer_modules_webgl.patch
+
+在目录D:\libcef4692\chromium_git\chromium\src\third_party\blink\renderer\modules\webgl下执行
+```
+git diff . > D:\srccode\cefpatches\cef97\0003_getDXVersion\src_third_party_blink_renderer_modules_webgl.patch
+
+```
+实际执行，请根据自己的实际目录修改。
+
+```
+D:\libcef4692\chromium_git\chromium\src\third_party\blink\renderer\modules\webgl>git diff . > D:\srccode\cefpatches\cef97\0003_getDXVersion\src_third_party_blink_renderer_modules_webgl.patch
+```
+### src_third_party_angle.patch
+在目录下\src\third_party\angle下执行
+```
+git diff . > D:\srccode\cefpatches\cef97\0003_getDXVersion\src_third_party_angle.patch
+
+```
+
+实际执行，请根据自己的实际目录修改。
+```
+D:\libcef4692\chromium_git\chromium\src\third_party\angle>git diff . > D:\srccode\cefpatches\cef97\0003_getDXVersion\src_third_party_angle.patch
+```
+
+## web中javascript代码判断执行
+
+```javascript
+        var dxversion = 0; //不支持
+        if(gl && gl.getDXVersion){
+            //1 表示支持DX11, 2表示内部支持DX9，0 表示不支持DX。
+            dxVersion = gl.getDXVersion();
+        }
+        console.log('dxVersion is ' + dxVersion);
+```
