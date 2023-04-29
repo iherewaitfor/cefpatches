@@ -67,7 +67,7 @@ cef开发文档，参考[https://www.chromium.org/developers/](https://www.chrom
 将需要渲染的视频帧写到共享纹理，在Canvas对应的Webgl中绑定共享纹理，读取共享纹理进行渲染，添加web接口，给到页面绑定共享纹理。
 
 ## 1. 添加javascript接口texBindSharedHandle
-公开为Javascript对象的Web接口，通常是由Web IDL(Interface Definition Language接口定义语言)指定。Web IDL是陈述性语言（有时没不够空间时，也写为WebIDL）。这是用在标准规范中的语言。Blink用IDL 文件来指定接口，并生成JavaScipt绑定（具体形式上，是V8 JavaScript虚拟机用来调用Blink本身的C++代码）。Blink中的Web IDL 接近标准，生成的绑定使用标准约定来调用Blink代码，但还有其他功能可以指定实现细节，主要是Blink IDL扩展属性。
+公开为Javascript对象的Web接口，通常是由Web IDL(Interface Definition Language接口定义语言)指定。Web IDL是陈述性语言（有时不够空间，也写为WebIDL）。这是用在标准规范中的语言。Blink用IDL 文件来指定接口，并生成JavaScipt绑定（具体形式上，是V8 JavaScript虚拟机用来调用Blink本身的C++代码）。Blink中的Web IDL 接近标准，生成的绑定使用标准约定来调用Blink代码，但还有其他功能可以指定实现细节，主要是Blink IDL扩展属性。
 在Blink中实现一个新的WebIDL接口：
 - 接口：写一个IDL file: fool.idl
 - 实现：写一个C++文件和头文件：foo.cc，foo.h
@@ -423,6 +423,144 @@ rx::RendererD3D *getRenderer() const { return mRenderer; }
 \src\third_party\angle\src/libGLESv2/entry_points_magic.cpp
 
 可以参考同文件夹下其他enty_points文件。
+# 0002_sharememrender给cef97添加共享内存渲染。
+给canvas添加渲染rgba格式的共享内存。原理上是让canvas从共享内存中读取视频帧数据进行渲染。
+
+也分两部分修改：
+- 给canvas_rendering_context_2d添加web接口，传入必要的共享内存参数
+- 添加功能实现辅助类，辅助读取共享内存
+
+添加web接口，请参考0001_dx11sharetexture关于web接口添加部分的描述。功能类似。不过canvas可以转offscreencanvas，所以需要写两个idl文件。
+
+涉及的文件
+
+修改文件
+
+/src/third_party/blink/renderer/modules/canvas/canvas2d/canvas_rendering_context_2d.idl
+
+/src/third_party/blink/renderer/modules/canvas/offscreencanvas2d/offscreen_canvas_rendering_context_2d.idl
+
+/src/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.h
+
+/src/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
+
+/src/third_party/blink/renderer/modules/canvas/BUILD.gn
+
+新增文件
+
+/src//third_party/blink/renderer/modules/canvas/canvas2d/QcSharedMemory.h
+
+/src//third_party/blink/renderer/modules/canvas/canvas2d/sharedmemoryhelper.h
+
+/src/third_party/blink/renderer/modules/canvas/canvas2d/sharedmemoryhelper.cpp
+
+## 添加web接口
+添加web接口
+### canvas_rendering_context_2d.idl
+/src/third_party/blink/renderer/modules/canvas/canvas2d/canvas_rendering_context_2d.idl
+
+```C++
+[RaisesException] void putSharedMemImageData(DOMString args);
+```
+### offscreen_canvas_rendering_context_2d.idl
+/src/third_party/blink/renderer/modules/canvas/offscreencanvas2d/offscreen_canvas_rendering_context_2d.idl
+
+```C++
+[RaisesException] void putSharedMemImageData(DOMString args);
+```
+### base_rendering_context_2d.h
+/src/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.h
+
+添加新增的辅助类的头文件
+```C++
+#include "sharedmemoryhelper.h"
+```
+添加新方法声明，及辅助类成员
+```C++
+  void putSharedMemImageData(const String& args, ExceptionState&);
+  mycefdemo::SharedMemHelper _sharedmemhelper;
+```
+### base_rendering_context_2d.cc
+/src/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
+
+新增方法的实现，主要是从入参中读取共享内存的名字、视频帧的宽高、行字节大小等。该方法实现可以参考同文件的putImageData。cef使用的是skia渲染库。其中SkPixmap可以参考[https://api.skia.org/classSkPixmap.html#details](https://api.skia.org/classSkPixmap.html#details)。或者直接转到代码查看。
+
+```C++
+void BaseRenderingContext2D::putSharedMemImageData(const String& args, ExceptionState& exception_state) {
+  std::string key;
+  int offset = 0;
+  int width = 0;
+  int height = 0;
+  int pitch = 0;
+  if (!mycefdemo::SharedMemHelper::parseArgs(args.Latin1().c_str(), key, offset,
+                                             width, height, pitch)) {
+    return;
+  }
+  unsigned char* source = (unsigned char*)_sharedmemhelper.data(key, offset);
+  if (source == NULL) {
+    return;
+  }
+
+  do
+  {
+	int dx = 0;
+    int dy = 0;
+    int dirty_x = 0;
+    int dirty_y = 0;
+    int dirty_width = width;
+    int dirty_height = height;
+	uint8_t bytes_per_pixel = GetCanvas2DColorParams().BytesPerPixel();
+    int dataWidth = pitch/bytes_per_pixel;
+    int dataHeight = height;
+
+    bool hasResourceProvider = CanCreateCanvas2dResourceProvider();
+    if (!hasResourceProvider)
+      break;
+
+    IntRect dest_rect(dirty_x, dirty_y, dirty_width, dirty_height);
+    dest_rect.Intersect(IntRect(0, 0, dataWidth, dataHeight));
+    IntSize dest_offset(static_cast<int>(dx), static_cast<int>(dy));
+    dest_rect.Offset(dest_offset);
+    dest_rect.Intersect(IntRect(0, 0, Width(), Height()));
+    if (dest_rect.IsEmpty())
+      break;
+
+    IntRect source_rect(dest_rect);
+    source_rect.Offset(-dest_offset);
+
+    CheckOverdraw(dest_rect, nullptr,
+                  CanvasRenderingContext2DState::kOpaqueImage,
+                  OverdrawOp::kTotal);
+    SkImageInfo imageInfo = SkImageInfo::Make(width, height,
+                                 SkColorType::kRGBA_8888_SkColorType,
+                          SkAlphaType::kUnpremul_SkAlphaType);
+    SkPixmap skPixMap = SkPixmap(imageInfo, source, width * bytes_per_pixel);
+    PutByteArray(skPixMap, gfx::Rect(source_rect.x(), source_rect.y(), source_rect.width(), source_rect.height()),
+                 gfx::Vector2d(dest_offset.width(), dest_offset.height()));
+
+    GetPaintCanvasForDraw(IntRect(dest_rect),
+                        CanvasPerformanceMonitor::DrawType::kImageData);
+  }
+  while(false);
+}
+```
+### BUILD.gn
+/src/third_party/blink/renderer/modules/canvas/BUILD.gn
+
+添加新增加的辅助类文件，以便构建。
+
+```C++
+    "canvas2d/QcSharedMemory.h",
+    "canvas2d/sharedmemoryhelper.h",
+    "canvas2d/sharedmemoryhelper.cpp",
+```
+## 添加辅助类文件
+具体内容请看patch文件。
+
+主要是用于打开共享内存，取得共享内存地址。
+主要用全共享内存相关的OpenFileMappingA和MapViewOfFile接口。
+
+
 
 # 0003_dxVersion给cef97添加dx版本判断。
 cef97中，有window中使用webgl的带硬件加速的实现是通过angle实现的，而 angle的具体实现可能是通过DX11或者是DX9。
