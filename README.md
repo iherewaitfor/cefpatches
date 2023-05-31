@@ -653,9 +653,10 @@ src/gpu/command_buffer/service/gles2_cmd_decoder_passthrough_doers.cc
 
 ## 编译
 在D:\libcef4692\chromium_git\chromium\src目录运行。
-
+```
 set DEPOT_TOOLS_WIN_TOOLCHAIN=0
 ninja -C out\Debug_GN_x86 cef
+```
 ## 各部分修改取patch
 本功能实现没有新加文件。全部为文件修改。取了3个patch.
 ### src_gpu_command_buffer.patch
@@ -701,3 +702,65 @@ D:\libcef4692\chromium_git\chromium\src\third_party\angle>git diff . > D:\srccod
         }
         console.log('dxVersion is ' + dxVersion);
 ```
+
+# 0004_SetWindowFps
+设置页面最高刷新频率。
+
+涉及的文件
+
+src\components\viz\service\display\
+```
+git diff . > src_components_viz_service_display.patch
+
+git diff . > D:\srccode\cefpatches\cef97\0004_setWindowFps\src_components_viz_service_display.patch
+```
+- src/components/viz/service/display/display_scheduler.cc
+
+
+
+D:\libcef4692\chromium_git\chromium\src\gpu\command_buffer
+```
+git diff . > src_gpu_command_buffer.patch
+
+git diff . > D:\srccode\cefpatches\cef97\0004_setWindowFps\src_gpu_command_buffer.patch
+```
+
+- src/gpu/command_buffer/client/gles2_cmd_helper.cc
+- src/gpu/command_buffer/client/gles2_cmd_helper.h
+- src/gpu/command_buffer/client/gles2_implementation.cc
+- src/gpu/command_buffer/client/gles2_implementation.h
+- src/gpu/command_buffer/client/gles2_interface.h
+- src/gpu/command_buffer/client/gles2_trace_implementation.cc
+- src/gpu/command_buffer/client/gles2_trace_implementation.h
+- src/gpu/command_buffer/common/gles2_cmd_format.h
+- src/gpu/command_buffer/common/gles2_cmd_ids.h
+- src/gpu/command_buffer/service/gles2_cmd_decoder.cc
+- src/gpu/command_buffer/service/gles2_cmd_decoder_passthrough.cc
+- src/gpu/command_buffer/service/gles2_cmd_decoder_passthrough.h
+- src/gpu/command_buffer/service/gles2_cmd_decoder_passthrough_doers.cc
+
+
+\src\third_party\blink\renderer\modules\webgl
+```
+git diff . > src_third_party_blink_renderer_modules_webgl.patch
+
+git diff . >  D:\srccode\cefpatches\cef97\0004_setWindowFps\src_third_party_blink_renderer_modules_webgl.patch
+
+```
+
+- src/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
+- src/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.h
+- src/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.idl
+
+##  javascript验证
+可以通过以下方式调用，限制最高帧率。为了验证是否有效，可以设置一个比较低的帧率，比如10帧。
+```javascript
+  var gl = canvas.getContext("webgl");
+  if(gl.setWindowFps){
+    gl.setWindowFps(30);
+  }
+```
+
+调用devtool后，点击...，然后点击more tool，选择rendering,勾上Frame rendering state就能看到页面目前刷新帧率了。如果应用不需要太高页面刷新帧率，可以通过限制最高刷新帧率来达到降低性能消耗。cef默认最高帧率是60fps。
+
+

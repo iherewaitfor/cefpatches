@@ -1,0 +1,283 @@
+diff --git a/gpu/command_buffer/client/gles2_cmd_helper.cc b/gpu/command_buffer/client/gles2_cmd_helper.cc
+index 883b14e87372a..96b2521c089be 100644
+--- a/gpu/command_buffer/client/gles2_cmd_helper.cc
++++ b/gpu/command_buffer/client/gles2_cmd_helper.cc
+@@ -28,6 +28,15 @@ void GLES2CmdHelper::GetDXVersion(uint32_t params_shm_id,
+     c->Init(params_shm_id, params_shm_offset);
+   }
+ }
++
++void GLES2CmdHelper::SetWindowFps(GLint fps) {
++  gles2::cmds::SetWindowFps* c =
++      GetCmdSpace<gles2::cmds::SetWindowFps>();
++  if (c) {
++    c->Init(fps);
++  }
++}
++
+ }  // namespace gles2
+ }  // namespace gpu
+ 
+diff --git a/gpu/command_buffer/client/gles2_cmd_helper.h b/gpu/command_buffer/client/gles2_cmd_helper.h
+index 94be75895ce4a..33073bd6f4fc5 100644
+--- a/gpu/command_buffer/client/gles2_cmd_helper.h
++++ b/gpu/command_buffer/client/gles2_cmd_helper.h
+@@ -35,6 +35,7 @@ class GPU_GLES2_EXPORT GLES2CmdHelper : public CommandBufferHelper {
+   void TexBindSharedHandle(GLintptr handle);
+   void GetDXVersion(uint32_t params_shm_id,
+                    uint32_t params_shm_offset);
++  void SetWindowFps(GLint fps);
+ };
+ 
+ }  // namespace gles2
+diff --git a/gpu/command_buffer/client/gles2_implementation.cc b/gpu/command_buffer/client/gles2_implementation.cc
+index 2916a6a9d552c..f9ea8013955c5 100644
+--- a/gpu/command_buffer/client/gles2_implementation.cc
++++ b/gpu/command_buffer/client/gles2_implementation.cc
+@@ -524,6 +524,14 @@ void GLES2Implementation::GetDXVersion(GLint* params) {
+   CheckGLError();
+ }
+ 
++void GLES2Implementation::SetWindowFps(GLint fps) {
++  GPU_CLIENT_SINGLE_THREAD_CHECK();
++  GPU_CLIENT_LOG("[" << GetLogPrefix() << "] SetWindowFps(" << fps
++                     << ")");
++  helper_->SetWindowFps(fps);
++  CheckGLError();
++}
++
+ GLuint GLES2Implementation::CreateGpuFenceCHROMIUM() {
+   GLuint client_id = GetIdAllocator(IdNamespaces::kGpuFences)
+                          ->AllocateIDAtOrAbove(last_gpu_fence_id_ + 1);
+diff --git a/gpu/command_buffer/client/gles2_implementation.h b/gpu/command_buffer/client/gles2_implementation.h
+index 352a8d9cf95f6..5d2657fae33d1 100644
+--- a/gpu/command_buffer/client/gles2_implementation.h
++++ b/gpu/command_buffer/client/gles2_implementation.h
+@@ -111,6 +111,7 @@ class GLES2_IMPL_EXPORT GLES2Implementation : public GLES2Interface,
+ 
+   void TexBindSharedHandle(GLintptr handle) override;
+   void GetDXVersion(GLint* params) override;
++  void SetWindowFps(GLint fps) override;
+ 
+   // ContextSupport implementation.
+   void SetAggressivelyFreeResources(bool aggressively_free_resources) override;
+diff --git a/gpu/command_buffer/client/gles2_interface.h b/gpu/command_buffer/client/gles2_interface.h
+index e1586c54f5078..f68cec8fb34ef 100644
+--- a/gpu/command_buffer/client/gles2_interface.h
++++ b/gpu/command_buffer/client/gles2_interface.h
+@@ -54,6 +54,7 @@ class GLES2Interface : public InterfaceBase {
+ 
+     virtual void TexBindSharedHandle(GLintptr handle) = 0;
+ 	virtual void GetDXVersion(GLint* params) = 0;
++	virtual void SetWindowFps(GLint fps) = 0;
+ };
+ 
+ }  // namespace gles2
+diff --git a/gpu/command_buffer/client/gles2_trace_implementation.cc b/gpu/command_buffer/client/gles2_trace_implementation.cc
+index 0559b48902cde..12434788ba14f 100644
+--- a/gpu/command_buffer/client/gles2_trace_implementation.cc
++++ b/gpu/command_buffer/client/gles2_trace_implementation.cc
+@@ -40,6 +40,10 @@ void GLES2TraceImplementation::TexBindSharedHandle(GLintptr handle) {
+ void GLES2TraceImplementation::GetDXVersion(GLint* params) {
+   gl_->GetDXVersion(params);
+ }
++void GLES2TraceImplementation::SetWindowFps(GLint fps) {
++  // TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::SetWindowFps");
++  gl_->SetWindowFps(fps);
++}
+ 
+ // Include the auto-generated part of this file. We split this because it means
+ // we can easily edit the non-auto generated parts right here in this file
+diff --git a/gpu/command_buffer/client/gles2_trace_implementation.h b/gpu/command_buffer/client/gles2_trace_implementation.h
+index 6893b854a18bc..3f33707792e23 100644
+--- a/gpu/command_buffer/client/gles2_trace_implementation.h
++++ b/gpu/command_buffer/client/gles2_trace_implementation.h
+@@ -32,6 +32,7 @@ class GLES2_IMPL_EXPORT GLES2TraceImplementation : public GLES2Interface {
+ 
+   void TexBindSharedHandle(GLintptr handle) override;
+   void GetDXVersion(GLint* params) override;
++  void SetWindowFps(GLint fps) override;
+ 
+  private:
+   GLES2Interface* gl_;
+diff --git a/gpu/command_buffer/common/gles2_cmd_format.h b/gpu/command_buffer/common/gles2_cmd_format.h
+index 495a0adbf25f1..ccf2e1c379d5f 100644
+--- a/gpu/command_buffer/common/gles2_cmd_format.h
++++ b/gpu/command_buffer/common/gles2_cmd_format.h
+@@ -334,6 +334,41 @@ static_assert(offsetof(GetDXVersion, params_shm_id) == 4,
+ static_assert(offsetof(GetDXVersion, params_shm_offset) == 8,
+               "offset of GetDXVersion params_shm_offset should be 8");
+ 
++
++struct SetWindowFps {
++  typedef SetWindowFps ValueType;
++  static const CommandId kCmdId = (CommandId)kSetWindowFps;
++  static const cmd::ArgFlags kArgFlags = cmd::kFixed;
++  static const uint8_t cmd_flags = CMD_FLAG_SET_TRACE_LEVEL(1);
++
++  static uint32_t ComputeSize() {
++    return static_cast<uint32_t>(sizeof(ValueType));  // NOLINT
++  }
++
++  void SetHeader() { header.SetCmd<ValueType>(); }
++
++  void Init(GLint _fps) {
++    SetHeader();
++    fps = _fps;
++  }
++
++  void* Set(void* cmd,
++            GLint _fps) {
++    static_cast<ValueType*>(cmd)->Init(_fps);
++    return NextCmdAddress<ValueType>(cmd);
++  }
++
++  gpu::CommandHeader header;
++  GLint fps;
++  static const int32_t border = 0;
++};
++
++static_assert(sizeof(SetWindowFps) == 8,
++              "size of SetWindowFps should be 8");
++static_assert(offsetof(SetWindowFps, header) == 0,
++              "offset of SetWindowFps header should be 0");
++static_assert(offsetof(SetWindowFps, fps) == 4,
++              "offset of SetWindowFps fps should be 4");
+ #pragma pack(pop)
+ 
+ }  // namespace cmd
+diff --git a/gpu/command_buffer/common/gles2_cmd_ids.h b/gpu/command_buffer/common/gles2_cmd_ids.h
+index a321c4c215cbc..ce2985b003dc3 100644
+--- a/gpu/command_buffer/common/gles2_cmd_ids.h
++++ b/gpu/command_buffer/common/gles2_cmd_ids.h
+@@ -11,6 +11,7 @@
+ enum {
+     kTexBindSharedHandle = 2000,
+     kGetDXVersion = 2001,
++	kSetWindowFps = 2002,
+ };
+ 
+ namespace gpu {
+diff --git a/gpu/command_buffer/service/gles2_cmd_decoder.cc b/gpu/command_buffer/service/gles2_cmd_decoder.cc
+index e8bf2e90676d9..c6c5603c8984d 100644
+--- a/gpu/command_buffer/service/gles2_cmd_decoder.cc
++++ b/gpu/command_buffer/service/gles2_cmd_decoder.cc
+@@ -2596,6 +2596,8 @@ class GLES2DecoderImpl : public GLES2Decoder,
+                                   const volatile void* data);
+   Error HandleGetDXVersion(uint32_t immediate_data_size,
+                           const volatile void* data);
++  Error HandleSetWindowFps(uint32_t immediate_data_size,
++                                  const volatile void* data);
+ 
+   // Generate a member function prototype for each command in an automated and
+   // typesafe way.
+@@ -2848,7 +2850,7 @@ class GLES2DecoderImpl : public GLES2Decoder,
+   };
+ 
+   // A table of CommandInfo for all the commands.
+-  static const CommandInfo command_info[kNumCommands - kFirstGLES2Command + 2];
++  static const CommandInfo command_info[kNumCommands - kFirstGLES2Command + 3];
+ 
+   // Most recent generation of the TextureManager.  If this no longer matches
+   // the current generation when our context becomes current, then we'll rebind
+@@ -2884,6 +2886,7 @@ constexpr GLES2DecoderImpl::CommandInfo GLES2DecoderImpl::command_info[] = {
+     GLES2_COMMAND_LIST(GLES2_CMD_OP)
+     GLES2_CMD_OP(TexBindSharedHandle)
+     GLES2_CMD_OP(GetDXVersion)
++    GLES2_CMD_OP(SetWindowFps)
+ #undef GLES2_CMD_OP
+ };
+ 
+@@ -20346,6 +20349,24 @@ error::Error GLES2DecoderImpl::HandleGetDXVersion(
+   return error::kNoError;
+ }
+ 
++error::Error GLES2DecoderImpl::HandleSetWindowFps(
++    uint32_t immediate_data_size,
++    const volatile void* cmd_data) {
++  const volatile cmds::SetWindowFps& c =
++      *static_cast<const volatile cmds::SetWindowFps*>(cmd_data);
++	  c.fps;
++  HMODULE cef = ::GetModuleHandleA("service.dll");
++  if (cef) {
++    typedef void(__stdcall * setWindowFpsFunc)(int);
++    setWindowFpsFunc fun =
++        (setWindowFpsFunc)::GetProcAddress(cef, "_setWindowFps@4");
++    if (fun) {
++      fun(c.fps);
++    }
++  }
++  return error::kNoError;
++}
++
+ error::Error GLES2DecoderImpl::HandleSetActiveURLCHROMIUM(
+     uint32_t immediate_data_size,
+     const volatile void* cmd_data) {
+diff --git a/gpu/command_buffer/service/gles2_cmd_decoder_passthrough.cc b/gpu/command_buffer/service/gles2_cmd_decoder_passthrough.cc
+index 4ad8d2f1dfd4d..d2fcd7c505f28 100644
+--- a/gpu/command_buffer/service/gles2_cmd_decoder_passthrough.cc
++++ b/gpu/command_buffer/service/gles2_cmd_decoder_passthrough.cc
+@@ -3106,7 +3106,9 @@ bool GLES2DecoderPassthroughImpl::CheckErrorCallbackState() {
+ constexpr GLES2DecoderPassthroughImpl::CommandInfo
+     GLES2DecoderPassthroughImpl::command_info[] = {
+         GLES2_COMMAND_LIST(GLES2_CMD_OP) GLES2_CMD_OP(TexBindSharedHandle)
+-        GLES2_CMD_OP(GetDXVersion)};
++        GLES2_CMD_OP(GetDXVersion)
++        GLES2_CMD_OP(SetWindowFps)
++};
+ 
+ #undef GLES2_CMD_OP
+ 
+diff --git a/gpu/command_buffer/service/gles2_cmd_decoder_passthrough.h b/gpu/command_buffer/service/gles2_cmd_decoder_passthrough.h
+index 851e25c35ff8a..6ce429b3d80ac 100644
+--- a/gpu/command_buffer/service/gles2_cmd_decoder_passthrough.h
++++ b/gpu/command_buffer/service/gles2_cmd_decoder_passthrough.h
+@@ -544,6 +544,7 @@ class GPU_GLES2_EXPORT GLES2DecoderPassthroughImpl
+   GLES2_COMMAND_LIST(GLES2_CMD_OP)
+   GLES2_CMD_OP(TexBindSharedHandle)
+   GLES2_CMD_OP(GetDXVersion)
++  GLES2_CMD_OP(SetWindowFps)
+ #undef GLES2_CMD_OP
+ 
+   using CmdHandler =
+@@ -559,7 +560,7 @@ class GPU_GLES2_EXPORT GLES2DecoderPassthroughImpl
+   };
+ 
+   // A table of CommandInfo for all the commands.
+-  static const CommandInfo command_info[kNumCommands - kFirstGLES2Command + 2];
++  static const CommandInfo command_info[kNumCommands - kFirstGLES2Command + 3];
+ 
+   // The GLApi to make the gl calls on.
+   gl::GLApi* api_ = nullptr;
+diff --git a/gpu/command_buffer/service/gles2_cmd_decoder_passthrough_doers.cc b/gpu/command_buffer/service/gles2_cmd_decoder_passthrough_doers.cc
+index 3f599aa779f7d..07c04d1e75f30 100644
+--- a/gpu/command_buffer/service/gles2_cmd_decoder_passthrough_doers.cc
++++ b/gpu/command_buffer/service/gles2_cmd_decoder_passthrough_doers.cc
+@@ -5494,6 +5494,27 @@ error::Error GLES2DecoderPassthroughImpl::HandleGetDXVersion(
+   return error::kNoError;
+ }
+ 
++error::Error GLES2DecoderPassthroughImpl::HandleSetWindowFps(
++    uint32_t immediate_data_size,
++    const volatile void* cmd_data) {
++  const volatile cmds::SetWindowFps& c =
++      *static_cast<const volatile cmds::SetWindowFps*>(cmd_data);
++#ifdef _DEBUG
++  HMODULE cef = ::GetModuleHandleA("service.dll");
++#else
++  HMODULE cef = ::GetModuleHandleA("libcef.dll");
++#endif
++  if (cef) {
++    typedef void(__stdcall * setWindowFpsFunc)(int);
++    setWindowFpsFunc fun =
++        (setWindowFpsFunc)::GetProcAddress(cef, "_setWindowFps@4");
++    if (fun) {
++      fun(c.fps);
++    }
++  }
++  return error::kNoError;
++}
++
+ error::Error
+ GLES2DecoderPassthroughImpl::DoBeginBatchReadAccessSharedImageCHROMIUM() {
+   DCHECK(group_->shared_image_manager());

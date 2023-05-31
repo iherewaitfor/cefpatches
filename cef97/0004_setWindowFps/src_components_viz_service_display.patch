@@ -1,0 +1,79 @@
+diff --git a/components/viz/service/display/display_scheduler.cc b/components/viz/service/display/display_scheduler.cc
+index dfc974d22a48a..bb3e108c1dd14 100644
+--- a/components/viz/service/display/display_scheduler.cc
++++ b/components/viz/service/display/display_scheduler.cc
+@@ -10,6 +10,55 @@
+ #include "base/trace_event/trace_event.h"
+ #include "components/viz/common/features.h"
+ 
++#include <windows.h>
++
++int gFps = 0;
++extern "C" __declspec(dllexport) void __stdcall setWindowFps(int fps) {
++  gFps = fps;
++}
++
++class DisplayFps {
++ public:
++  static DisplayFps* Instance() {
++    static DisplayFps* instance = new DisplayFps;
++    return instance;
++  }
++  bool shouldScheduler() {
++    if (_fps != gFps) {
++      _fps = gFps;
++      if (_fps <= 0 || _fps > 60)
++        return true;
++      _interval = 1000 / _fps;
++      _lastTick = 0;
++    }
++
++    if (_fps > 0 && _fps <= 60) {
++      unsigned int nowTick = GetTickCount();
++      if (nowTick < _lastTick) {
++        _lastTick = nowTick;
++        return true;
++      } else {
++        unsigned delta = nowTick - _lastTick;
++        if (delta < (unsigned)_interval)
++          return false;
++        if (delta < 1000)
++          _lastTick += _interval;
++        else
++          _lastTick = nowTick;
++        return true;
++      }
++    }
++
++    return true;
++  }
++
++ private:
++  int _fps;
++  int _interval;
++  unsigned int _lastTick;
++};
++
++
+ namespace viz {
+ 
+ class DisplayScheduler::BeginFrameObserver : public BeginFrameObserverBase {
+@@ -432,11 +481,13 @@ bool DisplayScheduler::AttemptDrawAndSwap() {
+ void DisplayScheduler::OnBeginFrameDeadline() {
+   TRACE_EVENT0("viz", "DisplayScheduler::OnBeginFrameDeadline");
+   DCHECK(inside_begin_frame_deadline_interval_);
+-
+-  bool did_draw = AttemptDrawAndSwap();
+-  DidFinishFrame(did_draw);
+-  if (gpu_pipeline_)
+-    gpu_pipeline_->NotifyFrameFinished();
++  if (DisplayFps::Instance()->shouldScheduler())
++  {
++    bool did_draw = AttemptDrawAndSwap();
++    DidFinishFrame(did_draw);
++    if (gpu_pipeline_)
++      gpu_pipeline_->NotifyFrameFinished();
++  }
+ }
+ 
+ void DisplayScheduler::DidFinishFrame(bool did_draw) {

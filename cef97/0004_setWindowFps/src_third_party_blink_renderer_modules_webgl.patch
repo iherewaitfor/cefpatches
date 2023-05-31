@@ -1,0 +1,43 @@
+diff --git a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
+index 2a94d0aa67b5c..4929df1699013 100644
+--- a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
++++ b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
+@@ -7193,6 +7193,14 @@ ScriptValue WebGLRenderingContextBase::getDXVersion(ScriptState* script_state) {
+   return WebGLAny(script_state, static_cast<int>(value));
+ }
+ 
++void WebGLRenderingContextBase::setWindowFps(ExecutionContext*,
++                                             GLint fps,
++                                             ExceptionState&) {
++  if (isContextLost())
++    return;
++  ContextGL()->SetWindowFps(fps);
++}
++
+ // Added to provide a unified interface with CanvasRenderingContext2D. Prefer
+ // calling forceLostContext instead.
+ void WebGLRenderingContextBase::LoseContext(LostContextMode mode) {
+diff --git a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.h b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.h
+index bea3b98070375..9012418c3fcd8 100644
+--- a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.h
++++ b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.h
+@@ -566,6 +566,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
+ 
+   void texBindSharedHandle(ExecutionContext*, int64_t handle, ExceptionState&);
+   ScriptValue getDXVersion(ScriptState*);
++  void setWindowFps(ExecutionContext*, GLint fps, ExceptionState&);
+ 
+   // WEBGL_lose_context support
+   enum AutoRecoveryMethod {
+diff --git a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.idl b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.idl
+index 091c218c8fe6a..af8e0179455ee 100644
+--- a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.idl
++++ b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.idl
+@@ -714,6 +714,7 @@ interface mixin WebGLRenderingContextBase {
+ 	
+ 	[CallWith=ExecutionContext, RaisesException] void texBindSharedHandle(GLintptr handle);
+ 	[CallWith=ScriptState] any getDXVersion();
++	[CallWith=ExecutionContext, RaisesException] void setWindowFps(GLint fps);
+ 
+     [RuntimeEnabled=OffscreenCanvasCommit] void commit();
+ 
