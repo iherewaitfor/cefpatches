@@ -1,4 +1,74 @@
+- [cefpatches](#cefpatches)
+- [cef97源码版本信息](#cef97源码版本信息)
+- [0001\_dx11sharetexture给cef97添加dx11纹理支持](#0001_dx11sharetexture给cef97添加dx11纹理支持)
+  - [1. 添加javascript接口texBindSharedHandle](#1-添加javascript接口texbindsharedhandle)
+    - [webgl\_rendering\_context\_base.idl](#webgl_rendering_context_baseidl)
+    - [webgl\_rendering\_context\_base.h](#webgl_rendering_context_baseh)
+    - [webgl\_rendering\_context\_base.cc](#webgl_rendering_context_basecc)
+  - [2. 添加gpu command处理](#2-添加gpu-command处理)
+  - [GPU Command Buffer原理](#gpu-command-buffer原理)
+    - [客户端代码（在render进程）](#客户端代码在render进程)
+    - [服务端代码（在gpu进程）](#服务端代码在gpu进程)
+  - [添加TextBindShareHandle](#添加textbindsharehandle)
+    - [gles2\_interface.h](#gles2_interfaceh)
+    - [gles2\_cmd\_format.h](#gles2_cmd_formath)
+    - [gles2\_cmd\_ids.h](#gles2_cmd_idsh)
+    - [gles2\_implementation.h](#gles2_implementationh)
+    - [gles2\_implementation.cc](#gles2_implementationcc)
+    - [gles2\_cmd\_helper.h](#gles2_cmd_helperh)
+    - [gles2\_cmd\_helper.cc](#gles2_cmd_helpercc)
+    - [gles2\_cmd\_decoder.cc](#gles2_cmd_decodercc)
+      - [1 添加函数定义声明](#1-添加函数定义声明)
+      - [2 命令信息数组长度加1](#2-命令信息数组长度加1)
+      - [3 把新加命令加入到命令信息数据](#3-把新加命令加入到命令信息数据)
+      - [4 修改命令索引获取](#4-修改命令索引获取)
+      - [5 添加命令处理函数](#5-添加命令处理函数)
+  - [3. angle添加接口实现\_复制共享纹理](#3-angle添加接口实现_复制共享纹理)
+    - [libGLESv2\_autogen.def](#libglesv2_autogendef)
+    - [libGLESv2.gni](#libglesv2gni)
+    - [DisplayD3D.h](#displayd3dh)
+    - [新添加导出函数](#新添加导出函数)
+- [0002\_sharememrender给cef97添加共享内存渲染。](#0002_sharememrender给cef97添加共享内存渲染)
+  - [添加web接口](#添加web接口)
+    - [canvas\_rendering\_context\_2d.idl](#canvas_rendering_context_2didl)
+    - [offscreen\_canvas\_rendering\_context\_2d.idl](#offscreen_canvas_rendering_context_2didl)
+    - [base\_rendering\_context\_2d.h](#base_rendering_context_2dh)
+    - [base\_rendering\_context\_2d.cc](#base_rendering_context_2dcc)
+    - [BUILD.gn](#buildgn)
+  - [添加辅助类文件](#添加辅助类文件)
+- [0003\_dxVersion给cef97添加dx版本判断。](#0003_dxversion给cef97添加dx版本判断)
+  - [添加web 接口](#添加web-接口)
+    - [webgl\_rendering\_context\_base.idl](#webgl_rendering_context_baseidl-1)
+  - [添加gpu command buffer处理](#添加gpu-command-buffer处理)
+    - [gles2\_interface.h](#gles2_interfaceh-1)
+    - [gles2\_cmd\_ids.h](#gles2_cmd_idsh-1)
+    - [gles2\_cmd\_format.h](#gles2_cmd_formath-1)
+    - [gles2\_implementation.h](#gles2_implementationh-1)
+    - [gles2\_implementation.cc](#gles2_implementationcc-1)
+    - [gles2\_trace\_implementation.h](#gles2_trace_implementationh)
+    - [gles2\_trace\_implementation.cc](#gles2_trace_implementationcc)
+    - [gles2\_cmd\_decoder.cc](#gles2_cmd_decodercc-1)
+    - [gles2\_cmd\_decoder\_passthrough.cc](#gles2_cmd_decoder_passthroughcc)
+    - [gles2\_cmd\_decoder\_passthrough.h](#gles2_cmd_decoder_passthroughh)
+    - [gles2\_cmd\_decoder\_passthrough\_doers.cc](#gles2_cmd_decoder_passthrough_doerscc)
+  - [3. angle添加接口实现\_获取angle内部使用的DX版本。](#3-angle添加接口实现_获取angle内部使用的dx版本)
+  - [编译](#编译)
+  - [各部分修改取patch](#各部分修改取patch)
+    - [src\_gpu\_command\_buffer.patch](#src_gpu_command_bufferpatch)
+    - [src\_third\_party\_blink\_renderer\_modules\_webgl.patch](#src_third_party_blink_renderer_modules_webglpatch)
+    - [src\_third\_party\_angle.patch](#src_third_party_anglepatch)
+  - [web中javascript代码判断执行](#web中javascript代码判断执行)
+- [0004\_SetWindowFps设置页面最高刷新帧率](#0004_setwindowfps设置页面最高刷新帧率)
+  - [涉及的文件](#涉及的文件)
+  - [添加web接口](#添加web接口-1)
+  - [command buffer部分逻辑处理](#command-buffer部分逻辑处理)
+  - [viz实际执行页面最高频道限制。](#viz实际执行页面最高频道限制)
+  - [javascript验证](#javascript验证)
+  - [参考](#参考)
+
+
 # cefpatches
+
 # cef97源码版本信息
 各部分代码的版本信息
 - depot_tools版本
@@ -703,10 +773,10 @@ D:\libcef4692\chromium_git\chromium\src\third_party\angle>git diff . > D:\srccod
         console.log('dxVersion is ' + dxVersion);
 ```
 
-# 0004_SetWindowFps
+# 0004_SetWindowFps设置页面最高刷新帧率
 设置页面最高刷新频率。
 
-涉及的文件
+## 涉及的文件
 
 src\components\viz\service\display\
 ```
@@ -752,6 +822,21 @@ git diff . >  D:\srccode\cefpatches\cef97\0004_setWindowFps\src_third_party_blin
 - src/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.h
 - src/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.idl
 
+## 添加web接口
+修改src/third_party/blink/renderer/modules/webgl/
+具体修改，可以参考[0001\_dx11sharetexture给cef97添加dx11纹理支持](#0001_dx11sharetexture给cef97添加dx11纹理支持)中的[1. 添加javascript接口texBindSharedHandle](#1-添加javascript接口texbindsharedhandle)
+## command buffer部分逻辑处理
+原理可以参考：
+[GPU Command Buffer原理](#gpu-command-buffer原理)
+
+在GPU进程接收到SetWindowFps的命令后，执行去设置页面最高刷新频率限制。
+具体修改的文件可以参考[添加TextBindShareHandle](#添加textbindsharehandle)
+
+
+
+## viz实际执行页面最高频道限制。
+// to do 
+
 ##  javascript验证
 可以通过以下方式调用，限制最高帧率。为了验证是否有效，可以设置一个比较低的帧率，比如10帧。
 ```javascript
@@ -762,5 +847,10 @@ git diff . >  D:\srccode\cefpatches\cef97\0004_setWindowFps\src_third_party_blin
 ```
 
 调用devtool后，点击...，然后点击more tool，选择rendering,勾上Frame rendering state就能看到页面目前刷新帧率了。如果应用不需要太高页面刷新帧率，可以通过限制最高刷新帧率来达到降低性能消耗。cef默认最高帧率是60fps。
+
+## 参考
+https://chromium.googlesource.com/chromium/src/+/refs/heads/main/components/viz/
+
+https://chromium.googlesource.com/chromium/src/+/refs/heads/main/components/viz/service/display/README.md
 
 
