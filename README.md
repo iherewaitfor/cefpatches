@@ -146,7 +146,7 @@ demo 运行依赖
   - 将这些patch打到cef后，编译好。
   - 并使用一个应用打开页面，测试上可以直接使用cefclient项目。
   - 这里有一个编译好的Debug_x86版本[https://kdocs.cn/l/chI1rcTDB8Cm](https://kdocs.cn/l/chI1rcTDB8Cm)，下载解压后，运行cefclient.exe即可。
-- 渲染页面
+- 渲染页面_渲染yuv420纹理
   - 请查看本git的这个项目[renderyuvincef](https://github.com/iherewaitfor/webglrenderimage/tree/main/renderyuvincef)
   - clone下载来后，在cefclient.exe中打开。
 
