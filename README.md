@@ -152,6 +152,9 @@ demo 运行依赖
 具体运行步骤：
 
 - 先运行ShareTextureYUVFFmpeg的生成纹理程序
+  - 为了更观的查看效果，可先准备一个mp4文件，查看到其视频宽度和高度，如640x420
+  - 本项目有自带一个yuv的图片，也可直接运行程序，不带参数，不过渲染的是一个静态的图片。
+  - 运行后，可在标题栏查看生成的共享纹理句柄。后续会用到。如图中的2147489474
 
 ```
 D:\srccode\direct3d11demo\ShareTextureYUVFFmpeg\CreateShareTexture\build\Debug>Demo.exe D:/guilinvideo.mp4
@@ -160,6 +163,9 @@ D:\srccode\direct3d11demo\ShareTextureYUVFFmpeg\CreateShareTexture\build\Debug>D
 ![运行ShareTextureYUVFFmpeg](images/ShareTextureYUV.png)
 
 - 打开cefclient在地址址输入renderyuvincef的index.html地址
+  - 在页面中输入视频宽高，如宽640，高420
+  - 输入共享纹理句柄 ，如图中的2147489474
+  - 点击AutoPlay，即可看到在页面渲染的视频。
 
 ```
 D:/srccode/webglrenderimage/renderyuvincef/index.html
