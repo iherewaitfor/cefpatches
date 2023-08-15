@@ -30,6 +30,7 @@
     - [DisplayD3D.h](#displayd3dh)
     - [新添加导出函数](#新添加导出函数)
 - [0002\_sharememrender给cef97添加共享内存渲染。](#0002_sharememrender给cef97添加共享内存渲染)
+  - [How to Run](#how-to-run-1)
   - [添加web接口](#添加web接口)
     - [canvas\_rendering\_context\_2d.idl](#canvas_rendering_context_2didl)
     - [offscreen\_canvas\_rendering\_context\_2d.idl](#offscreen_canvas_rendering_context_2didl)
@@ -569,6 +570,43 @@ rx::RendererD3D *getRenderer() const { return mRenderer; }
 /src//third_party/blink/renderer/modules/canvas/canvas2d/sharedmemoryhelper.h
 
 /src/third_party/blink/renderer/modules/canvas/canvas2d/sharedmemoryhelper.cpp
+
+## How to Run
+demo 运行依赖
+- RGBA共享内存写端
+  - 请查看本git的这个项目[ShareTextureRGBAFFmpeg](https://github.com/iherewaitfor/direct3d11demo/tree/main/ShareTextureRGBAFFmpeg))
+  - 先编译运行该项目，用于写共享内存，以便cef有共享内存可读。
+- 编译好的cef及cefclient.
+  - 将这些patch打开cef后，cef的修改编译好。
+  - 并使用一个应用打开页面，测试上可以直接使用cefclient项目。
+  - 这里有一个编译好的Debug_x86版本[https://kdocs.cn/l/chI1rcTDB8Cm](https://kdocs.cn/l/chI1rcTDB8Cm)，下载解压后，运行cefclient.exe即可。
+- 渲染页面
+  - 请查看本git的这个项目[renderrgbacef](https://github.com/iherewaitfor/webglrenderimage/tree/main/renderrgbacef))
+  - clone下载来后，在cefclient.exe中打开。
+
+具体运行步骤：
+
+- 先运行ShareTextureRGBAFFmpeg的生成共享内存程序
+  - 为了更直观的查看效果，可先准备一个mp4文件，查看到其视频宽度和高度，如640x420
+  - 本项目有自带一个RGBA的图片，也可直接运行程序，不带参数，不过渲染的是一个静态的图片。
+  - 生成程序的共享内存的key默认为"myShareMemRGBA123"。
+
+```
+D:\srccode\direct3d11demo\ShareTextureRGBAFFmpeg\CreateShareTexture\build\Debug>Demo.exe D:\guilinvideo.mp4
+```
+
+![ShareTextureRGBAFFmpeg](images/createsharedmem.png)
+
+- 打开cefclient在地址址输入renderrgbacef的index.html地址
+  - 在页面中输入视频宽高，如宽640，高420
+  - 输入共享内存key.若为默认值，可不填
+  - 点击AutoPlayRGBAShareMemory，即可看到在页面渲染的视频。
+
+```
+D:/srccode/webglrenderimage/renderrgbacef/index.html
+```
+![运行renderrgbacef/index.html](images/render_sharedmem_rgba.png)
+
 
 ## 添加web接口
 添加web接口
