@@ -577,7 +577,7 @@ demo 运行依赖
   - 请查看本git的这个项目[ShareTextureRGBAFFmpeg](https://github.com/iherewaitfor/direct3d11demo/tree/main/ShareTextureRGBAFFmpeg))
   - 先编译运行该项目，用于写共享内存，以便cef有共享内存可读。
 - 编译好的cef及cefclient.
-  - 将这些patch打到cef后，把cef的编译好。
+  - 将这些patch打到cef后，把cef编译好。
   - 使用一个应用打开页面，测试上可以直接使用cefclient项目。
   - 这里有一个编译好的Debug_x86版本[https://kdocs.cn/l/chI1rcTDB8Cm](https://kdocs.cn/l/chI1rcTDB8Cm)，下载解压后，运行cefclient.exe即可。
 - 渲染页面
