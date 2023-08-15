@@ -1,6 +1,7 @@
 - [cefpatches](#cefpatches)
 - [cef97源码版本信息](#cef97源码版本信息)
 - [0001\_dx11sharetexture给cef97添加dx11纹理支持](#0001_dx11sharetexture给cef97添加dx11纹理支持)
+  - [How to Run](#how-to-run)
   - [1. 添加javascript接口texBindSharedHandle](#1-添加javascript接口texbindsharedhandle)
     - [webgl\_rendering\_context\_base.idl](#webgl_rendering_context_baseidl)
     - [webgl\_rendering\_context\_base.h](#webgl_rendering_context_baseh)
@@ -135,6 +136,36 @@ cef开发文档，参考[https://www.chromium.org/developers/](https://www.chrom
 能实现在web上播放自己生产的视频，可以支持多路视频。
 实现：
 将需要渲染的视频帧写到共享纹理，在Canvas对应的Webgl中绑定共享纹理，读取共享纹理进行渲染，添加web接口，给到页面绑定共享纹理。
+## How to Run
+demo 运行依赖
+- yuv420共享纹理写端
+  - 请查看本git的这个项目[ShareTextureYUVFFmpeg](https://github.com/iherewaitfor/direct3d11demo/tree/main/ShareTextureYUVFFmpeg)
+  - 先编译运行该项目，用于写共享纹理，以便cef有共享纹理可读。
+- 编译好的cef及cefclient.
+  - 将这些patch打开cef后，cef的修改编译好。
+  - 并使用一个应用打开页面，测试上可以直接使用cefclient项目。
+  - 这里有一个编译好的Debug_x86版本[https://kdocs.cn/l/chI1rcTDB8Cm](https://kdocs.cn/l/chI1rcTDB8Cm)，下载解压后，运行cefclient.exe即可。
+- 渲染页面
+  - 请查看本git的这个项目[renderyuvincef](https://github.com/iherewaitfor/webglrenderimage/tree/main/renderyuvincef)
+  - clone下载来后，在cefclient.exe中打开。
+
+具体运行步骤：
+
+- 先运行ShareTextureYUVFFmpeg的生成纹理程序
+
+```
+D:\srccode\direct3d11demo\ShareTextureYUVFFmpeg\CreateShareTexture\build\Debug>Demo.exe D:/guilinvideo.mp4
+```
+
+![运行ShareTextureYUVFFmpeg](images/ShareTextureYUV.png)
+
+- 打开cefclient在地址址输入renderyuvincef的index.html地址
+
+```
+D:/srccode/webglrenderimage/renderyuvincef/index.html
+```
+![运行renderyuvincef/index.html](images/render_yuv_cef.png)
+
 
 ## 1. 添加javascript接口texBindSharedHandle
 公开为Javascript对象的Web接口，通常是由Web IDL(Interface Definition Language接口定义语言)指定。Web IDL是陈述性语言（有时不够空间，也写为WebIDL）。这是用在标准规范中的语言。Blink用IDL 文件来指定接口，并生成JavaScipt绑定（具体形式上，是V8 JavaScript虚拟机用来调用Blink本身的C++代码）。Blink中的Web IDL 接近标准，生成的绑定使用标准约定来调用Blink代码，但还有其他功能可以指定实现细节，主要是Blink IDL扩展属性。
