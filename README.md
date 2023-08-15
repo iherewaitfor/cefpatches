@@ -152,7 +152,7 @@ demo 运行依赖
 具体运行步骤：
 
 - 先运行ShareTextureYUVFFmpeg的生成纹理程序
-  - 为了更观的查看效果，可先准备一个mp4文件，查看到其视频宽度和高度，如640x420
+  - 为了更直观的查看效果，可先准备一个mp4文件，查看到其视频宽度和高度，如640x420
   - 本项目有自带一个yuv的图片，也可直接运行程序，不带参数，不过渲染的是一个静态的图片。
   - 运行后，可在标题栏查看生成的共享纹理句柄。后续会用到。如图中的2147489474
 
@@ -172,6 +172,15 @@ D:/srccode/webglrenderimage/renderyuvincef/index.html
 ```
 ![运行renderyuvincef/index.html](images/render_yuv_cef.png)
 
+
+验证RGBA格式的流程类似。只需要替把依赖项目换成以下：
+
+- 生成RGBA纹理项目
+  - [ShareTextureRGBAFFmpeg](https://github.com/iherewaitfor/direct3d11demo/tree/main/ShareTextureRGBAFFmpeg)
+  - 用法和yuv的一样，只是产生的纹理 是RGBA格式的。
+- web渲染RGBA纹理 
+  - [renderrgbacef](https://github.com/iherewaitfor/webglrenderimage/tree/main/renderrgbacef)
+  - 用法和yuv的一样，只是其渲染的渲染的共享纹理是RGBA格式的。
 
 ## 1. 添加javascript接口texBindSharedHandle
 公开为Javascript对象的Web接口，通常是由Web IDL(Interface Definition Language接口定义语言)指定。Web IDL是陈述性语言（有时不够空间，也写为WebIDL）。这是用在标准规范中的语言。Blink用IDL 文件来指定接口，并生成JavaScipt绑定（具体形式上，是V8 JavaScript虚拟机用来调用Blink本身的C++代码）。Blink中的Web IDL 接近标准，生成的绑定使用标准约定来调用Blink代码，但还有其他功能可以指定实现细节，主要是Blink IDL扩展属性。
