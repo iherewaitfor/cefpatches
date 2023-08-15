@@ -574,7 +574,7 @@ rx::RendererD3D *getRenderer() const { return mRenderer; }
 ## How to Run
 demo 运行依赖
 - RGBA共享内存写端
-  - 请查看本git的这个项目[ShareTextureRGBAFFmpeg](https://github.com/iherewaitfor/direct3d11demo/tree/main/ShareTextureRGBAFFmpeg))
+  - 请查看本git的这个项目[ShareTextureRGBAFFmpeg](https://github.com/iherewaitfor/direct3d11demo/tree/main/ShareTextureRGBAFFmpeg)
   - 先编译运行该项目，用于写共享内存，以便cef有共享内存可读。
 - 编译好的cef及cefclient.
   - 将这些patch打到cef后，把cef编译好。
