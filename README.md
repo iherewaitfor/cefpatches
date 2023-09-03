@@ -639,7 +639,7 @@ D:/srccode/webglrenderimage/renderrgbacef/index.html
 
 新增方法的实现，主要是从入参中读取共享内存的名字、视频帧的宽高、行字节大小等。该方法实现可以参考同文件[base_rendering_context_2d.cc](https://chromium.googlesource.com/chromium/src/+/refs/tags/97.0.4692.20/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc)的[putImageData](https://chromium.googlesource.com/chromium/src/+/refs/tags/97.0.4692.20/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc)。cef使用的是skia渲染库。其中SkPixmap可以参考[https://api.skia.org/classSkPixmap.html#details](https://api.skia.org/classSkPixmap.html#details)。或者直接转到代码查看。
 
-参考的web标准的[putImageData](https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/putImageData)方法是从js上取到图像数据，传进去，触发canvas进行刷新。而本功能新增加的方法，是页面传共享内存的key来过，由该方法内部从共享内存读取图像数据，设置给canvas进行刷新。
+参考的web标准的[putImageData](https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/putImageData)方法是从js上取到图像数据，传进去，触发canvas进行刷新。而本功能新增加的方法putSharedMemImageData，是页面传共享内存的key来过，由该方法putSharedMemImageData内部从共享内存读取图像数据，设置给canvas进行刷新。
 
 
 ```C++
