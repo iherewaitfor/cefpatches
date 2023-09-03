@@ -923,6 +923,7 @@ git diff . >  D:\srccode\cefpatches\cef97\0004_setWindowFps\src_third_party_blin
 
 ## viz实际执行页面最高频道限制。
 // to do 
+[display_scheduler.cc](https://chromium.googlesource.com/chromium/src/+/refs/heads/main/components/viz/service/display/display_scheduler.cc)
 
 ##  javascript验证
 可以通过以下方式调用，限制最高帧率。为了验证是否有效，可以设置一个比较低的帧率，比如10帧。
