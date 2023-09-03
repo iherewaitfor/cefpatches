@@ -64,7 +64,7 @@
   - [涉及的文件](#涉及的文件)
   - [添加web接口](#添加web接口-1)
   - [command buffer部分逻辑处理](#command-buffer部分逻辑处理)
-  - [viz实际执行页面最高频道限制。](#viz实际执行页面最高频道限制)
+  - [viz实际执行页面刷新最高频率限制。](#viz实际执行页面刷新最高频率限制)
   - [javascript验证](#javascript验证)
   - [参考](#参考)
 
@@ -921,7 +921,7 @@ git diff . >  D:\srccode\cefpatches\cef97\0004_setWindowFps\src_third_party_blin
 
 
 
-## viz实际执行页面最高频道限制。
+## viz实际执行页面刷新最高频率限制。
 // to do 
 [display_scheduler.cc](https://chromium.googlesource.com/chromium/src/+/refs/heads/main/components/viz/service/display/display_scheduler.cc)
 
