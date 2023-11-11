@@ -547,7 +547,7 @@ rx::RendererD3D *getRenderer() const { return mRenderer; }
 - 给canvas_rendering_context_2d添加web接口，传入必要的共享内存参数
 - 添加功能实现辅助类，辅助读取共享内存
 
-添加web接口，请参考0001_dx11sharetexture关于web接口添加部分的描述。功能类似。不过canvas可以转offscreencanvas，所以需要写两个idl文件。
+添加web接口，请参考0001_dx11sharetexture关于web接口添加部分的描述[1. 添加javascript接口texBindSharedHandle](https://github.com/iherewaitfor/cefpatches/blob/main/README.md#1-%E6%B7%BB%E5%8A%A0javascript%E6%8E%A5%E5%8F%A3texbindsharedhandle)。功能类似。不过canvas可以转offscreencanvas，所以需要写两个idl文件。
 
 涉及的文件
 
